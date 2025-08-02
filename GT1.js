@@ -196,6 +196,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 showNotification(`Welcome to ${gameState.currentSystem.name}!`);
             }, 100);
+            gameState.pan = {
+            isDragging: false,
+            lastX: 0,
+            lastY: 0,
+            scale: 1.0,
+            minScale: 0.5,
+            maxScale: 3.0,
+            startDistance: null
+                };
         }
         
         // Show loading screen
@@ -473,18 +482,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     shipContainer.appendChild(shipIndicator);
                 }
             });
-        }
-
-        // Move the galaxy map
-        function moveMap(dx, dy) {
-            gameState.ship.mapOffsetX += dx;
-            gameState.ship.mapOffsetY += dy;
-            
-            // Constrain movement to reasonable bounds
-            gameState.ship.mapOffsetX = Math.max(-300, Math.min(300, gameState.ship.mapOffsetX));
-            gameState.ship.mapOffsetY = Math.max(-200, Math.min(200, gameState.ship.mapOffsetY));
-            
-            setupCanvas();
         }
 
         // Create travel animation effect
@@ -1544,6 +1541,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function setupEventListeners() {
             // System selection
             const systemContainer = document.getElementById('system-container');
+            const mapContainer = document.querySelector('.map-container');
             
             if (systemContainer) {
                 // System selection
@@ -1617,10 +1615,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (attackPoliceBtn) attackPoliceBtn.addEventListener('click', () => handlePoliceAction('attack'));
             
             // Map movement buttons
-            document.getElementById('move-up').addEventListener('click', () => moveMap(0, -30));
-            document.getElementById('move-down').addEventListener('click', () => moveMap(0, 30));
-            document.getElementById('move-left').addEventListener('click', () => moveMap(-30, 0));
-            document.getElementById('move-right').addEventListener('click', () => moveMap(30, 0));
+            
+                        // Mouse events
+            mapContainer.addEventListener('mousedown', startDrag);
+            mapContainer.addEventListener('mousemove', drag);
+            mapContainer.addEventListener('mouseup', endDrag);
+            mapContainer.addEventListener('mouseleave', endDrag);
+            
+                // Touch events
+            mapContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
+            mapContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
+            mapContainer.addEventListener('touchend', handleTouchEnd);
             
             // Contract buttons
             document.addEventListener('click', (e) => {
@@ -1647,6 +1652,97 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
         }
+        function startDrag(e) {
+            gameState.pan.isDragging = true;
+            gameState.pan.lastX = e.clientX;
+            gameState.pan.lastY = e.clientY;
+            e.preventDefault();
+        }
+        function drag(e) {
+            if (!gameState.pan.isDragging) return;
+                
+            const dx = e.clientX - gameState.pan.lastX;
+            const dy = e.clientY - gameState.pan.lastY;
+            gameState.pan.lastX = e.clientX;
+            gameState.pan.lastY = e.clientY;
+                
+            moveMap(dx, dy);
+            e.preventDefault();
+        }
+        function endDrag() {
+            gameState.pan.isDragging = false;
+        }
+        function handleTouchStart(e) {
+            if (e.touches.length === 1) {
+                startDrag(e.touches[0]);
+            } else if (e.touches.length === 2) {
+                // Pinch gesture start
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                gameState.pan.startDistance = Math.sqrt(dx * dx + dy * dy);
+            }
+            e.preventDefault();
+        }
+        function handleTouchMove(e) {
+            if (e.touches.length === 1) {
+                drag(e.touches[0]);
+            } else if (e.touches.length === 2) {
+                // Pinch gesture
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                if (gameState.pan.startDistance !== null) {
+                    const scaleChange = distance / gameState.pan.startDistance;
+                    const newScale = Math.min(
+                        gameState.pan.maxScale, 
+                        Math.max(
+                            gameState.pan.minScale, 
+                            gameState.pan.scale * scaleChange
+                        )
+                    );
+                    if (newScale !== gameState.pan.scale) {
+                        gameState.pan.scale = newScale;
+                        applyZoom();
+                    }
+                }
+                    gameState.pan.startDistance = distance;
+            }
+                e.preventDefault();
+        }
+        function handleTouchEnd(e) {
+            if (e.touches.length === 0) {
+                endDrag();
+                 gameState.pan.startDistance = null;
+            } else if (e.touches.length === 1) {
+                gameState.pan.startDistance = null;
+            }
+        }
+        function applyZoom() {
+            const mapContainer = document.querySelector('.map-container');
+            const innerElements = mapContainer.querySelectorAll('canvas, #system-container, #ship-container');
+            
+            innerElements.forEach(el => {
+                el.style.transform = `scale(${gameState.pan.scale})`;
+                el.style.transformOrigin = 'center';
+            });
+        }
+        function moveMap(dx, dy) {
+            // Apply scale to movement
+            const scaledDx = dx / gameState.pan.scale;
+            const scaledDy = dy / gameState.pan.scale;
+            
+            gameState.ship.mapOffsetX += scaledDx;
+            gameState.ship.mapOffsetY += scaledDy;
+            
+            // Constrain movement to reasonable bounds
+            const maxOffset = 300 * gameState.pan.scale;
+            gameState.ship.mapOffsetX = Math.max(-maxOffset, Math.min(maxOffset, gameState.ship.mapOffsetX));
+            gameState.ship.mapOffsetY = Math.max(-maxOffset, Math.min(maxOffset, gameState.ship.mapOffsetY));
+            
+            updateGalaxyView();
+        }
+
 
         // Initialization when page loads
         window.addEventListener('load', () => {
