@@ -82,15 +82,29 @@ export class UI {
             // Highlight current system
             if (system === this.gameState.currentSystem) {
                 systemDot.classList.add('selected-system');
-                
-                // Draw ship
-                const shipIndicator = document.createElement('div');
-                shipIndicator.className = 'ship-indicator';
-                shipIndicator.style.left = `${system.x - 12 + this.gameState.ship.mapOffsetX}px`;
-                shipIndicator.style.top = `${system.y - 12 + this.gameState.ship.mapOffsetY}px`;
-                shipContainer.appendChild(shipIndicator);
             }
         });
+        
+        // Draw ship (after systems)
+        this.updateShipPosition();
+    }
+    
+    // Update ship position
+    updateShipPosition() {
+        const shipContainer = document.getElementById('ship-container');
+        if (!shipContainer) return;
+        
+        shipContainer.innerHTML = '';
+        
+        if (this.gameState.currentSystem) {
+            const shipIndicator = document.createElement('div');
+            shipIndicator.className = 'ship-indicator';
+            shipIndicator.innerHTML = '<i class="fas fa-space-shuttle"></i>';
+            shipIndicator.style.left = `${this.gameState.currentSystem.x - 12 + this.gameState.ship.mapOffsetX}px`;
+            shipIndicator.style.top = `${this.gameState.currentSystem.y - 12 + this.gameState.ship.mapOffsetY}px`;
+            shipIndicator.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
+            shipContainer.appendChild(shipIndicator);
+        }
     }
 
     // Move the galaxy map
@@ -163,6 +177,7 @@ export class UI {
                 <div class="market-header">COMMODITY</div>
                 <div class="market-header">BUY</div>
                 <div class="market-header">SELL</div>
+                <div class="market-header">STOCK</div>
                 <div class="market-header">ACTIONS</div>
             `;
             
@@ -172,13 +187,17 @@ export class UI {
                 marketElement.className = 'market-item';
                 
                 const illegalIndicator = marketItem.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
+                const stockIndicator = marketItem.quantity > 0 ? 
+                    `<span style="color: #66ff99;">${marketItem.quantity}</span>` : 
+                    `<span style="color: #ff6666;">0</span>`;
                 
                 marketElement.innerHTML = `
                     <span>${illegalIndicator}${marketItem.name}</span>
                     <span>${marketItem.buyPrice} CR</span>
                     <span>${marketItem.sellPrice} CR</span>
+                    <span>${stockIndicator}</span>
                     <div style="display: flex; gap: 5px; justify-content: center;">
-                        <button class="btn btn-buy" data-good="${good.id}" data-action="buy">BUY</button>
+                        <button class="btn btn-buy" data-good="${good.id}" data-action="buy" ${marketItem.quantity <= 0 ? 'disabled' : ''}>BUY</button>
                         <button class="btn btn-sell" data-good="${good.id}" data-action="sell">SELL</button>
                     </div>
                 `;
@@ -441,15 +460,6 @@ export class UI {
             
             if (system === this.gameState.currentSystem) {
                 dot.classList.add('selected-system');
-                
-                // Draw ship
-                const shipIndicator = document.createElement('div');
-                shipIndicator.className = 'ship-indicator';
-                shipIndicator.style.left = `${system.x - 12 + this.gameState.ship.mapOffsetX}px`;
-                shipIndicator.style.top = `${system.y - 12 + this.gameState.ship.mapOffsetY}px`;
-                shipContainer.appendChild(shipIndicator);
-            } else {
-                dot.classList.remove('selected-system');
             }
             
             if (system === this.gameState.targetSystem) {
@@ -466,6 +476,9 @@ export class UI {
             nameEl.style.left = `${system.x + 10 + this.gameState.ship.mapOffsetX}px`;
             nameEl.style.top = `${system.y - 25 + this.gameState.ship.mapOffsetY}px`;
         });
+        
+        // Update ship position
+        this.updateShipPosition();
     }
 
     // Show notification
@@ -587,13 +600,22 @@ export class UI {
                 const shipContainer = document.getElementById('ship-container');
                 if (shipContainer) {
                     shipContainer.innerHTML = '';
+                    
+                    // Calculate current position
                     const currentX = this.gameState.ship.x + (this.gameState.ship.targetX - this.gameState.ship.x) * progress;
                     const currentY = this.gameState.ship.y + (this.gameState.ship.targetY - this.gameState.ship.y) * progress;
                     
+                    // Calculate rotation angle
+                    const dx = this.gameState.ship.targetX - this.gameState.ship.x;
+                    const dy = this.gameState.ship.targetY - this.gameState.ship.y;
+                    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+                    
                     const shipIndicator = document.createElement('div');
                     shipIndicator.className = 'ship-indicator';
+                    shipIndicator.innerHTML = '<i class="fas fa-space-shuttle"></i>';
                     shipIndicator.style.left = `${currentX - 12 + this.gameState.ship.mapOffsetX}px`;
                     shipIndicator.style.top = `${currentY - 12 + this.gameState.ship.mapOffsetY}px`;
+                    shipIndicator.style.transform = `rotate(${angle}deg)`;
                     shipContainer.appendChild(shipIndicator);
                 }
                 

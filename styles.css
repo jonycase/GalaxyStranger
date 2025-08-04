@@ -128,12 +128,15 @@ h1 {
     position: absolute;
     width: 24px;
     height: 24px;
-    background: #66ccff;
-    clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-    transform: rotate(180deg);
     z-index: 20;
-    box-shadow: 0 0 15px #66ccff;
     pointer-events: none;
+    transition: transform 0.2s;
+}
+
+.ship-indicator i {
+    font-size: 24px;
+    color: #66ccff;
+    text-shadow: 0 0 5px rgba(100, 180, 255, 0.7);
 }
 
 .ui-panel {
@@ -197,7 +200,7 @@ h2 i {
 
 .market-grid {
     display: grid;
-    grid-template-columns: 1.5fr 1fr 1fr auto;
+    grid-template-columns: 1.5fr 1fr 1fr 1fr auto;
     gap: 8px;
     align-items: center;
     font-size: 12px;
@@ -547,7 +550,8 @@ h2 i {
     }
     
     .market-header:nth-child(3),
-    .market-header:nth-child(4) {
+    .market-header:nth-child(4),
+    .market-header:nth-child(5) {
         display: none;
     }
     

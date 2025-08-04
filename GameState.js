@@ -19,12 +19,18 @@ export class GameState {
             shields: 20,
             engine: 1,
             mapOffsetX: 0,
-            mapOffsetY: 0
+            mapOffsetY: 0,
+            rotation: 0
         };
         this.currentSystem = null;
         this.targetSystem = null;
         this.galaxy = [];
         this.galaxySize = 200;
+        this.totalDaysTraveled = 0;
+        this.restockIntervalMin = 7;
+        this.restockIntervalMax = 10;
+        this.fullRestockIntervalMin = 11;
+        this.fullRestockIntervalMax = 14;
         this.goods = [
             { id: 'food', name: 'Food Rations', basePrice: 10, volatility: 3, production: ['agricultural'], illegal: false },
             { id: 'water', name: 'Water', basePrice: 5, volatility: 2, production: ['agricultural', 'mining'], illegal: false },
@@ -184,28 +190,44 @@ export class GameState {
                 techLevel: techLevel,
                 security: security,
                 market: {},
-                hasShipyard: Math.random() > 0.7
+                hasShipyard: Math.random() > 0.7,
+                lastRestock: 0,
+                daysSinceRestock: 0
             };
             
             // Generate market prices based on production type
             this.goods.forEach(good => {
+                // Base price modifier based on production
                 let baseModifier = 1;
                 if (good.production.includes(economy)) {
                     baseModifier = 0.5 + Math.random() * 0.3;
                 } else {
                     baseModifier = 1.2 + Math.random() * 0.4;
                 }
+                
+                // Adjust for tech level
                 if (techLevel === 'low') baseModifier *= 1.3;
                 if (techLevel === 'high') baseModifier *= 0.9;
                 
+                // Random volatility
                 const rand = 0.8 + Math.random() * 0.4;
                 const price = Math.round(good.basePrice * baseModifier * rand);
+                
+                // Calculate quantity based on production
+                let baseQuantity = 20;
+                if (good.production.includes(economy)) {
+                    baseQuantity = 30 + Math.floor(Math.random() * 20);
+                } else {
+                    baseQuantity = 10 + Math.floor(Math.random() * 15);
+                }
                 
                 system.market[good.id] = {
                     name: good.name,
                     buyPrice: price,
                     sellPrice: Math.round(price * (0.7 + Math.random() * 0.3)),
-                    illegal: good.illegal
+                    illegal: good.illegal,
+                    quantity: baseQuantity,
+                    maxQuantity: baseQuantity * 2
                 };
             });
             
@@ -226,6 +248,45 @@ export class GameState {
         }
     }
 
+    // Restock system based on days traveled
+    restockSystem(system) {
+        const daysPassed = this.totalDaysTraveled - system.lastRestock;
+        
+        // Calculate partial restock (7-10 days)
+        if (daysPassed >= this.restockIntervalMin && daysPassed < this.fullRestockIntervalMin) {
+            this.goods.forEach(good => {
+                if (system.market[good.id]) {
+                    const maxQuantity = system.market[good.id].maxQuantity;
+                    const currentQuantity = system.market[good.id].quantity;
+                    // Restock to half of max
+                    const targetQuantity = Math.floor(maxQuantity * 0.5);
+                    if (currentQuantity < targetQuantity) {
+                        system.market[good.id].quantity = Math.min(targetQuantity, currentQuantity + 5);
+                    }
+                }
+            });
+            system.lastRestock = this.totalDaysTraveled - (this.fullRestockIntervalMin - daysPassed - 1);
+        } 
+        // Calculate full restock (11-14 days)
+        else if (daysPassed >= this.fullRestockIntervalMin) {
+            this.goods.forEach(good => {
+                if (system.market[good.id]) {
+                    const maxQuantity = system.market[good.id].maxQuantity;
+                    const currentQuantity = system.market[good.id].quantity;
+                    // Restock to full
+                    const targetQuantity = maxQuantity;
+                    if (currentQuantity < targetQuantity) {
+                        system.market[good.id].quantity = Math.min(targetQuantity, currentQuantity + 10);
+                    }
+                }
+            });
+            // Update last restock time
+            system.lastRestock = this.totalDaysTraveled;
+        }
+        
+        system.daysSinceRestock = daysPassed;
+    }
+    
     // Generate contracts
     generateContracts() {
         this.contracts = [];
@@ -312,6 +373,12 @@ export class GameState {
         this.ship.targetX = this.targetSystem.x;
         this.ship.targetY = this.targetSystem.y;
         
+        // Calculate rotation angle for ship
+        const dx = this.ship.targetX - this.ship.x;
+        const dy = this.ship.targetY - this.ship.y;
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        this.ship.rotation = angle;
+        
         return { 
             success: true, 
             message: `Traveling to ${this.targetSystem.name}...`,
@@ -324,6 +391,16 @@ export class GameState {
         this.ship.traveling = false;
         this.currentSystem = this.targetSystem;
         this.targetSystem = null;
+        
+        // Add days traveled to total
+        const distance = this.calculateDistance(
+            {x: this.ship.x, y: this.ship.y}, 
+            {x: this.ship.targetX, y: this.ship.targetY}
+        );
+        this.totalDaysTraveled += Math.round(distance);
+        
+        // Restock current system
+        this.restockSystem(this.currentSystem);
         
         // Reset map position
         this.ship.mapOffsetX = 0;
@@ -372,6 +449,11 @@ export class GameState {
                 return { success: false, message: 'Not enough credits!' };
             }
             
+            // Check if item is in stock
+            if (marketItem.quantity <= 0) {
+                return { success: false, message: 'Item out of stock!' };
+            }
+            
             // Check cargo space
             const cargoSpace = this.cargo.reduce((sum, item) => sum + item.quantity, 0);
             if (cargoSpace >= this.cargoCapacity) {
@@ -380,6 +462,7 @@ export class GameState {
             
             // Process transaction
             this.credits -= marketItem.buyPrice;
+            marketItem.quantity--; // Reduce stock
             
             // Add to cargo
             const existingItem = this.cargo.find(item => item.id === goodId);

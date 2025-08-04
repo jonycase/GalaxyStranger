@@ -19,7 +19,6 @@
         </div>
         <div id="generation-info" class="generation-info" style="margin-top: 15px; font-size: 14px;"></div>
     </div>
-    
     <!-- Unified Encounter Modal -->
     <div id="encounter-modal" class="encounter-modal">
         <div class="encounter-container">
@@ -31,7 +30,6 @@
             <div id="encounter-options" class="combat-options"></div>
         </div>
     </div>
-    
     <!-- Main Game Container -->
     <div class="game-container">
         <header>
@@ -143,8 +141,8 @@
                             <div class="market-header">COMMODITY</div>
                             <div class="market-header">BUY</div>
                             <div class="market-header">SELL</div>
+                            <div class="market-header">STOCK</div>
                             <div class="market-header">ACTIONS</div>
-                            <!-- Filled dynamically -->
                         </div>
                     </div>
                     <!-- Cargo Tab -->
@@ -210,6 +208,9 @@
         </div>
     </div>
     <!-- Main Game Script -->
+    <script type="module" src="GameState.js"></script>
+    <script type="module" src="EncounterManager.js"></script>
+    <script type="module" src="UI.js"></script>
     <script type="module">
         import { GameState } from './GameState.js';
         import { EncounterManager } from './EncounterManager.js';
