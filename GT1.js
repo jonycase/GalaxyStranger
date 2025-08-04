@@ -110,9 +110,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 });
         const gameState = {
-            credits: 10000,
-            fuel: 15,
-            maxFuel: 15,
+            credits: 2500,
+            fuel: 10,
+            maxFuel: 10,
             cargo: [],
             cargoCapacity: 50,
             shipCondition: 100,
@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
             contracts: [],
             encounters: [
                 { type: 'pirate', name: 'Pirate Attack', weight: 30 },
-                { type: 'police', name: 'Police Inspection', weight: 20 },
+                { type: 'police', name: 'Police Inspection', weight: 25 },
                 { type: 'trader', name: 'Wandering Trader', weight: 15 },
                 { type: 'debris', name: 'Space Debris Field', weight: 15 },
                 { type: 'distress', name: 'Distress Signal', weight: 10 },
@@ -1133,7 +1133,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         return sum + marketItem.sellPrice * item.quantity;
                     }, 0);
                     
-                    const finePercentage = 0.25 + Math.random() * 0.25; // 25-50%
+                    const finePercentage = 0.50 + Math.random() * 0.25; // 25-50%
                     const fineAmount = Math.min(gameState.credits * finePercentage, 5000 + totalIllegalValue);
                     
                     if (confiscatedGoodsEl) confiscatedGoodsEl.textContent = `Confiscated: ${illegalGoods.length} types of illegal goods`;
@@ -1351,7 +1351,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         return sum + marketItem.sellPrice * item.quantity;
                     }, 0);
                     
-                    const finePercentage = 0.25 + Math.random() * 0.25; // 25-50%
+                    const finePercentage = 0.50 + Math.random() * 0.25; // 25-50%
                     const fineAmount = Math.min(gameState.credits * finePercentage, 5000 + totalIllegalValue);
                     
                     // Apply fine and confiscate goods
