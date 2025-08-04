@@ -1,0 +1,141 @@
+import { Encounter } from './Encounter.js';
+
+export class PoliceEncounter extends Encounter {
+    constructor(player, gameState) {
+        super(player, gameState, {
+            type: 'police',
+            title: 'POLICE INSPECTION',
+            iconClass: 'fa-shield-alt'
+        });
+    }
+
+    renderContent(contentEl) {
+        // Check for illegal goods
+        const illegalGoods = this.gameState.cargo.filter(item => item.illegal);
+        
+        let content = `
+            <div id="police-message" style="margin: 20px 0;">
+                Galactic Patrol has intercepted your ship for a routine cargo inspection.
+            </div>
+        `;
+        
+        if (illegalGoods.length > 0) {
+            // Calculate fine
+            const totalIllegalValue = illegalGoods.reduce((sum, item) => {
+                const marketItem = this.gameState.currentSystem.market[item.id];
+                return sum + marketItem.sellPrice * item.quantity;
+            }, 0);
+            const finePercentage = 0.25 + Math.random() * 0.25; // 25-50%
+            const fineAmount = Math.min(this.gameState.credits * finePercentage, 5000 + totalIllegalValue);
+            
+            content += `
+                <div id="illegal-goods-found" style="margin: 15px 0; color: #ff6666;">
+                    <p><i class="fas fa-exclamation-triangle"></i> Illegal goods detected!</p>
+                    <p>Confiscated: ${illegalGoods.length} types of illegal goods</p>
+                    <p>Fine: ${Math.round(fineAmount)} CR</p>
+                </div>
+            `;
+        } else {
+            content += `
+                <div id="no-illegal-goods" style="margin: 15px 0; color: #66ff99;">
+                    <p><i class="fas fa-check-circle"></i> No illegal goods found. You may proceed.</p>
+                </div>
+            `;
+        }
+        
+        contentEl.innerHTML = content;
+    }
+
+    renderOptions() {
+        const optionsEl = document.getElementById('encounter-options');
+        if (!optionsEl) return;
+        
+        optionsEl.innerHTML = '';
+        
+        const illegalGoods = this.gameState.cargo.filter(item => item.illegal);
+        if (illegalGoods.length > 0) {
+            const complyButton = document.createElement('button');
+            complyButton.className = 'combat-btn';
+            complyButton.style.background = 'linear-gradient(to bottom, #3366cc, #2244aa);';
+            complyButton.innerHTML = '<i class="fas fa-check"></i> COMPLY';
+            complyButton.dataset.action = 'comply';
+            optionsEl.appendChild(complyButton);
+        }
+        
+        const attackButton = document.createElement('button');
+        attackButton.className = 'combat-btn attack';
+        attackButton.innerHTML = '<i class="fas fa-fist-raised"></i> ATTACK';
+        attackButton.dataset.action = 'attack';
+        optionsEl.appendChild(attackButton);
+    }
+
+    handleAction(action) {
+        if (action === 'comply') {
+            const illegalGoods = this.gameState.cargo.filter(item => item.illegal);
+            if (illegalGoods.length > 0) {
+                // Calculate fine
+                const totalIllegalValue = illegalGoods.reduce((sum, item) => {
+                    const marketItem = this.gameState.currentSystem.market[item.id];
+                    return sum + marketItem.sellPrice * item.quantity;
+                }, 0);
+                const finePercentage = 0.25 + Math.random() * 0.25; // 25-50%
+                const fineAmount = Math.min(this.gameState.credits * finePercentage, 5000 + totalIllegalValue);
+                
+                // Apply fine and confiscate goods
+                this.gameState.credits -= Math.round(fineAmount);
+                this.gameState.cargo = this.gameState.cargo.filter(item => !item.illegal);
+                this.log(`Paid ${Math.round(fineAmount)} CR fine and had illegal goods confiscated.`);
+            } else {
+                this.log("Police inspection completed. No illegal goods found.");
+            }
+            
+            setTimeout(() => {
+                this.end();
+                this.closeEncounterModal();
+            }, 1000);
+        } else if (action === 'attack') {
+            // Police are very strong (tier 12)
+            const policeStats = {
+                hull: 150,
+                damage: 25,
+                accuracy: 80,
+                tier: 12
+            };
+            
+            // Player attacks police
+            const damageDealt = Math.max(1, this.gameState.ship.damage - Math.floor(Math.random() * 3));
+            policeStats.hull -= damageDealt;
+            
+            if (policeStats.hull <= 0) {
+                // Police defeated (very unlikely)
+                this.log("You defeated the police ship! But now you're a wanted criminal.");
+                setTimeout(() => {
+                    this.end();
+                    this.closeEncounterModal();
+                }, 2000);
+            } else {
+                // Police counterattack
+                if (Math.random() * 100 < policeStats.accuracy) {
+                    let damageTaken = Math.max(10, policeStats.damage + Math.floor(Math.random() * 10));
+                    this.gameState.ship.hull -= damageTaken;
+                    this.log(`Police counterattacked! Took ${damageTaken}% hull damage.`);
+                    
+                    // Check for game over
+                    if (this.gameState.ship.hull <= 0) {
+                        this.gameState.ship.hull = 0;
+                        this.log(`<strong>Your ship was destroyed by the police!</strong>`);
+                        setTimeout(() => {
+                            this.end();
+                            this.closeEncounterModal();
+                        }, 2000);
+                    }
+                }
+            }
+        } else {
+            super.handleAction(action);
+        }
+        
+        // Update UI
+        this.updateMainUI();
+    }
+}

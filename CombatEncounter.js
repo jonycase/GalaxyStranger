@@ -184,7 +184,7 @@ export class CombatEncounter extends Encounter {
         let encounterContinues = false;
         
         // Attempt to escape
-        if (Math.random() > 0.3) {
+        if (Math.random() > 0.1) {
             playerEffect = "Escape successful!";
         } else {
             opponentDamage = Math.max(3, this.opponentStats.damage + Math.floor(Math.random() * 5));
@@ -261,6 +261,11 @@ export class CombatEncounter extends Encounter {
         
         // Update UI
         this.updateMainUI();
+        
+        // Check for game over
+        if (this.gameState.ship.hull <= 0) {
+            this.showGameOverScreen();
+        }
         
         return encounterResult;
     }

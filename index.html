@@ -19,6 +19,7 @@
         </div>
         <div id="generation-info" class="generation-info" style="margin-top: 15px; font-size: 14px;"></div>
     </div>
+    
     <!-- Unified Encounter Modal -->
     <div id="encounter-modal" class="encounter-modal">
         <div class="encounter-container">
@@ -30,6 +31,18 @@
             <div id="encounter-options" class="combat-options"></div>
         </div>
     </div>
+    
+    <!-- Game Over Screen -->
+    <div id="game-over-screen" class="game-over-screen" style="display: none;">
+        <h2>YOUR SHIP IS DESTROYED</h2>
+        <div class="game-over-stats">
+            <div>Credits: <span id="game-over-credits">0 CR</span></div>
+            <div>Distance Traveled: <span id="game-over-distance">0 LY</span></div>
+            <div>Systems Visited: <span id="game-over-systems">0</span></div>
+        </div>
+        <button id="new-game-btn" class="btn btn-action">START NEW GAME</button>
+    </div>
+    
     <!-- Main Game Container -->
     <div class="game-container">
         <header>
@@ -247,6 +260,16 @@
                             });
                         }, 300);
                     });
+                });
+                
+                // Game Over Screen Event Listener
+                document.getElementById('new-game-btn').addEventListener('click', () => {
+                    const gameOverScreen = document.getElementById('game-over-screen');
+                    if (gameOverScreen) gameOverScreen.style.display = 'none';
+                    
+                    const initScreen = document.getElementById('init-screen');
+                    if (initScreen) initScreen.style.display = 'flex';
+                    window.location.reload();
                 });
             });
         });

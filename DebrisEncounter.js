@@ -1,9 +1,8 @@
 import { Encounter } from './Encounter.js';
 
 export class DebrisEncounter extends Encounter {
-    constructor(player, gameState, options = {}) {
+    constructor(player, gameState) {
         super(player, gameState, {
-            ...options,
             type: 'debris',
             title: 'SPACE DEBRIS FIELD',
             iconClass: 'fa-radiation'
@@ -14,11 +13,11 @@ export class DebrisEncounter extends Encounter {
 
     renderContent(contentEl) {
         contentEl.innerHTML = `
-            <p>You've entered a field of space debris!</p>
+            <p>You've entered a dangerous space debris field!</p>
             <div style="margin: 15px 0; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                <div>Damage: <span style="color: #ff6666;">${this.damage}% hull damage</span></div>
+                <div>Damage: <span style="color: #ff6666;">${this.damage}%</span></div>
             </div>
-            <p>Would you like to attempt to navigate through it?</p>
+            <p>Would you like to try to navigate through or go around?</p>
         `;
     }
 
@@ -29,39 +28,47 @@ export class DebrisEncounter extends Encounter {
         optionsEl.innerHTML = '';
         
         const navigateButton = document.createElement('button');
-        navigateButton.className = 'combat-btn';
-        navigateButton.style.background = 'linear-gradient(to bottom, #cc6666, #aa4444);';
-        navigateButton.innerHTML = `<i class="fas fa-running"></i> NAVIGATE`;
+        navigateButton.className = 'combat-btn attack';
+        navigateButton.innerHTML = '<i class="fas fa-rocket"></i> NAVIGATE THROUGH';
         navigateButton.dataset.action = 'navigate';
         optionsEl.appendChild(navigateButton);
         
-        const avoidButton = document.createElement('button');
-        avoidButton.className = 'combat-btn';
-        avoidButton.style.background = 'linear-gradient(to bottom, #6666cc, #4444aa);';
-        avoidButton.innerHTML = `<i class="fas fa-shield-alt"></i> AVOID`;
-        avoidButton.dataset.action = 'avoid';
-        optionsEl.appendChild(avoidButton);
+        const goAroundButton = document.createElement('button');
+        goAroundButton.className = 'combat-btn';
+        goAroundButton.innerHTML = '<i class="fas fa-route"></i> GO AROUND';
+        goAroundButton.dataset.action = 'go-around';
+        optionsEl.appendChild(goAroundButton);
     }
 
     handleAction(action) {
         if (action === 'navigate') {
-            this.log(`You hit space debris! Took ${this.damage}% hull damage.`);
-            this.gameState.ship.hull = Math.max(0, this.gameState.ship.hull - this.damage);
-        } else {
-            // 70% chance to avoid debris
-            if (Math.random() < 0.7) {
-                this.log("You successfully avoided the debris field.");
-            } else {
-                const partialDamage = Math.floor(this.damage / 2);
-                this.log(`You tried to avoid but still took ${partialDamage}% hull damage.`);
-                this.gameState.ship.hull = Math.max(0, this.gameState.ship.hull - partialDamage);
+            // Higher chance of taking damage
+            const damage = this.damage + Math.floor(Math.random() * 5);
+            this.gameState.ship.hull = Math.max(0, this.gameState.ship.hull - damage);
+            this.log(`Took ${damage}% hull damage navigating through the debris field.`);
+            
+            // Check for game over
+            if (this.gameState.ship.hull <= 0) {
+                this.log(`<strong>Your ship was destroyed by the debris!</strong>`);
             }
+            
+            setTimeout(() => {
+                this.end();
+                this.closeEncounterModal();
+            }, 1000);
+        } else if (action === 'go-around') {
+            // Add a small fuel cost for going around
+            const fuelCost = 2 + Math.floor(Math.random() * 3);
+            this.gameState.fuel = Math.max(0, this.gameState.fuel - fuelCost);
+            this.log(`Went around the debris field, using ${fuelCost} fuel.`);
+            
+            setTimeout(() => {
+                this.end();
+                this.closeEncounterModal();
+            }, 500);
+        } else {
+            super.handleAction(action);
         }
-        
-        setTimeout(() => {
-            this.end();
-            this.closeEncounterModal();
-        }, 1000);
     }
     
     end(result = {}) {

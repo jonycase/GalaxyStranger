@@ -124,4 +124,28 @@ export class Encounter {
         const cargoSpace = this.gameState.cargo.reduce((sum, item) => sum + item.quantity, 0);
         if (cargoSpaceEl) cargoSpaceEl.textContent = `${cargoSpace}/${this.gameState.cargoCapacity}`;
     }
+    
+    checkGameOver() {
+        if (this.gameState.ship.hull <= 0) {
+            this.showGameOverScreen();
+            return true;
+        }
+        return false;
+    }
+    
+    showGameOverScreen() {
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const creditsEl = document.getElementById('game-over-credits');
+        const distanceEl = document.getElementById('game-over-distance');
+        const systemsEl = document.getElementById('game-over-systems');
+        
+        if (gameOverScreen) {
+            // Update stats
+            if (creditsEl) creditsEl.textContent = this.gameState.credits.toLocaleString() + ' CR';
+            if (distanceEl) distanceEl.textContent = Math.round(this.gameState.distanceTraveled) + ' LY';
+            if (systemsEl) systemsEl.textContent = this.gameState.systemsVisited;
+            
+            gameOverScreen.style.display = 'flex';
+        }
+    }
 }

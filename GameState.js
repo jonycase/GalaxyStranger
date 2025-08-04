@@ -73,10 +73,43 @@ export class GameState {
             { type: 'distress', name: 'Distress Signal', weight: 10 },
             { type: 'anomaly', name: 'Spatial Anomaly', weight: 10 }
         ];
+        this.distanceTraveled = 0;
+        this.systemsVisited = 1;
+        this.gameOver = false;
     }
     
     initGame(size, callback) {
+        this.credits = 10000;
+        this.fuel = 15;
+        this.maxFuel = 15;
+        this.cargo = [];
+        this.cargoCapacity = 50;
+        this.ship = {
+            x: 0,
+            y: 0,
+            targetX: 0,
+            targetY: 0,
+            traveling: false,
+            travelProgress: 0,
+            hull: 100,
+            maxHull: 100,
+            damage: 10,
+            evasion: 15,
+            shields: 20,
+            engine: 1,
+            mapOffsetX: 0,
+            mapOffsetY: 0,
+            rotation: 0
+        };
+        this.currentSystem = null;
+        this.targetSystem = null;
+        this.galaxy = [];
         this.galaxySize = size;
+        this.totalDaysTraveled = 0;
+        this.distanceTraveled = 0;
+        this.systemsVisited = 1;
+        this.gameOver = false;
+        
         this.showLoadingScreen();
         // Use a timeout to allow the loading screen to render
         setTimeout(() => {
@@ -213,21 +246,34 @@ export class GameState {
                 const rand = 0.8 + Math.random() * 0.4;
                 const price = Math.round(good.basePrice * baseModifier * rand);
                 
-                // Calculate quantity based on production
-                let baseQuantity = 20;
-                if (good.production.includes(economy)) {
-                    baseQuantity = 30 + Math.floor(Math.random() * 20);
-                } else {
-                    baseQuantity = 10 + Math.floor(Math.random() * 15);
+                // Calculate quantity based on tech level and base price
+                let maxQuantity;
+                switch(techLevel) {
+                    case 'low': maxQuantity = 40; break;
+                    case 'medium': maxQuantity = 80; break;
+                    case 'high': maxQuantity = 120; break;
+                    default: maxQuantity = 60;
                 }
+                
+                // Higher quantity for lower price items
+                const highestBasePrice = 800; // Highest base price in the game
+                let quantity = Math.round(maxQuantity * (1 - (good.basePrice / highestBasePrice)));
+                
+                // Add bonus for matching economy type (50% more)
+                if (good.production.includes(economy)) {
+                    quantity = Math.round(quantity * 1.5);
+                }
+                
+                // Ensure quantity is within reasonable bounds
+                quantity = Math.max(5, Math.min(maxQuantity, quantity));
                 
                 system.market[good.id] = {
                     name: good.name,
                     buyPrice: price,
                     sellPrice: Math.round(price * (0.7 + Math.random() * 0.3)),
                     illegal: good.illegal,
-                    quantity: baseQuantity,
-                    maxQuantity: baseQuantity * 2
+                    quantity: quantity,
+                    maxQuantity: maxQuantity
                 };
             });
             
@@ -398,6 +444,8 @@ export class GameState {
             {x: this.ship.targetX, y: this.ship.targetY}
         );
         this.totalDaysTraveled += Math.round(distance);
+        this.distanceTraveled += distance;
+        this.systemsVisited++;
         
         // Restock current system
         this.restockSystem(this.currentSystem);
@@ -635,5 +683,21 @@ export class GameState {
         }
         
         return { success: false, message: 'Invalid contract action' };
+    }
+    
+    // Check if game is over
+    checkGameOver() {
+        if (this.ship.hull <= 0) {
+            this.gameOver = true;
+            return true;
+        }
+        return false;
+    }
+    
+    // Handle damage to ship
+    takeDamage(amount) {
+        this.ship.hull -= amount;
+        this.ship.hull = Math.max(0, this.ship.hull);
+        return this.checkGameOver();
     }
 }

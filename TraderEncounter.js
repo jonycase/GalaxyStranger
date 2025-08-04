@@ -1,9 +1,8 @@
 import { Encounter } from './Encounter.js';
 
 export class TraderEncounter extends Encounter {
-    constructor(player, gameState, options = {}) {
+    constructor(player, gameState) {
         super(player, gameState, {
-            ...options,
             type: 'trader',
             title: 'WANDERING TRADER',
             iconClass: 'fa-shopping-cart'
@@ -16,7 +15,6 @@ export class TraderEncounter extends Encounter {
     }
 
     renderContent(contentEl) {
-        // Fixed the template string issue by breaking it into parts
         let purchaseMessage = '';
         if (this.maxQuantity > 0) {
             purchaseMessage = '<p>Would you like to purchase some?</p>';

@@ -1,27 +1,27 @@
 import { Encounter } from './Encounter.js';
 
 export class AnomalyEncounter extends Encounter {
-    constructor(player, gameState, options = {}) {
+    constructor(player, gameState) {
         super(player, gameState, {
-            ...options,
             type: 'anomaly',
             title: 'SPATIAL ANOMALY',
             iconClass: 'fa-wind'
         });
         
         this.effect = Math.random();
-        this.fuelLoss = 0;
-        this.damage = 0;
         this.reward = 0;
+        this.damage = 0;
+        this.fuelChange = 0;
         
+        // Determine the effect
         if (this.effect < 0.3) {
             // Positive effect - fuel boost
-            this.fuelGain = 10;
+            this.fuelChange = 10;
             this.message = "Passed through a spatial anomaly. Gained 10 fuel units!";
         } else if (this.effect < 0.7) {
             // Negative effect - fuel loss
-            this.fuelLoss = 10 + Math.floor(Math.random() * 20);
-            this.message = `Passed through a spatial anomaly. Lost ${this.fuelLoss} fuel units.`;
+            this.fuelChange = - (10 + Math.floor(Math.random() * 20));
+            this.message = `Passed through a spatial anomaly. Lost ${Math.abs(this.fuelChange)} fuel units.`;
         } else {
             // Mixed effect
             this.reward = 300 + Math.floor(Math.random() * 700);
@@ -34,9 +34,13 @@ export class AnomalyEncounter extends Encounter {
         contentEl.innerHTML = `
             <p>You've encountered a strange spatial anomaly!</p>
             <div style="margin: 15px 0; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                <p>${this.message}</p>
+                <div>Effect: <span style="${this.fuelChange > 0 ? 'color: #66ff99;' : this.fuelChange < 0 ? 'color: #ff6666;' : 'color: #66ff99;'}">
+                    ${this.fuelChange > 0 ? '+' : ''}${this.fuelChange} fuel
+                </span></div>
+                ${this.reward > 0 ? `<div>Reward: <span style="color: #66ff99;">${this.reward} CR</span></div>` : ''}
+                ${this.damage > 0 ? `<div>Damage: <span style="color: #ff6666;">${this.damage}%</span></div>` : ''}
             </div>
-            <p>Would you like to investigate further?</p>
+            <p>${this.message}</p>
         `;
     }
 
@@ -46,59 +50,40 @@ export class AnomalyEncounter extends Encounter {
         
         optionsEl.innerHTML = '';
         
-        const investigateButton = document.createElement('button');
-        investigateButton.className = 'combat-btn';
-        investigateButton.style.background = 'linear-gradient(to bottom, #6666cc, #4444aa);';
-        investigateButton.innerHTML = `<i class="fas fa-search"></i> INVESTIGATE`;
-        investigateButton.dataset.action = 'investigate';
-        optionsEl.appendChild(investigateButton);
-        
-        const bypassButton = document.createElement('button');
-        bypassButton.className = 'combat-btn';
-        bypassButton.style.background = 'linear-gradient(to bottom, #cc6666, #aa4444);';
-        bypassButton.innerHTML = `<i class="fas fa-running"></i> BYPASS`;
-        bypassButton.dataset.action = 'bypass';
-        optionsEl.appendChild(bypassButton);
+        const proceedButton = document.createElement('button');
+        proceedButton.className = 'combat-btn';
+        proceedButton.innerHTML = '<i class="fas fa-wind"></i> PROCEED THROUGH';
+        proceedButton.dataset.action = 'proceed';
+        optionsEl.appendChild(proceedButton);
     }
 
     handleAction(action) {
-        if (action === 'investigate') {
-            if (this.effect < 0.3) {
-                // Positive effect
-                this.gameState.fuel = Math.min(this.gameState.maxFuel, this.gameState.fuel + this.fuelGain);
-                this.log(`Gained ${this.fuelGain} fuel units!`);
-            } else if (this.effect < 0.7) {
-                // Negative effect
-                this.gameState.fuel = Math.max(0, this.gameState.fuel - this.fuelLoss);
-                this.log(`Lost ${this.fuelLoss} fuel units.`);
-            } else {
-                // Mixed effect
+        if (action === 'proceed') {
+            // Apply effects
+            this.gameState.fuel = Math.max(0, Math.min(this.gameState.maxFuel, this.gameState.fuel + this.fuelChange));
+            
+            if (this.reward > 0) {
                 this.gameState.credits += this.reward;
+            }
+            
+            if (this.damage > 0) {
                 this.gameState.ship.hull = Math.max(0, this.gameState.ship.hull - this.damage);
-                this.log(`Gained ${this.reward} CR but took ${this.damage}% hull damage.`);
             }
+            
+            this.log(this.message);
+            
+            // Check for game over
+            if (this.gameState.ship.hull <= 0) {
+                this.log(`<strong>Your ship was destroyed by the anomaly!</strong>`);
+            }
+            
+            setTimeout(() => {
+                this.end();
+                this.closeEncounterModal();
+            }, 1000);
         } else {
-            // 30% chance of minor effect when bypassing
-            if (Math.random() < 0.3) {
-                const minorEffect = Math.random();
-                if (minorEffect < 0.5) {
-                    const minorFuelLoss = 5 + Math.floor(Math.random() * 10);
-                    this.gameState.fuel = Math.max(0, this.gameState.fuel - minorFuelLoss);
-                    this.log(`Minor anomaly effect: Lost ${minorFuelLoss} fuel units.`);
-                } else {
-                    const minorDamage = 3 + Math.floor(Math.random() * 5);
-                    this.gameState.ship.hull = Math.max(0, this.gameState.ship.hull - minorDamage);
-                    this.log(`Minor anomaly effect: Took ${minorDamage}% hull damage.`);
-                }
-            } else {
-                this.log("You safely bypassed the anomaly.");
-            }
+            super.handleAction(action);
         }
-        
-        setTimeout(() => {
-            this.end();
-            this.closeEncounterModal();
-        }, 1000);
     }
     
     end(result = {}) {
