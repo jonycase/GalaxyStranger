@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Galactic Trader Mobile</title>
     <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jonycase/fa6icons@main/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jonycase/fa6icons@main/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@4.1.1/animate.min.css">
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -20,66 +20,15 @@
         <div id="generation-info" class="generation-info" style="margin-top: 15px; font-size: 14px;"></div>
     </div>
     
-    <!-- Combat Modal -->
-    <div id="combat-modal" class="combat-modal">
-        <div class="combat-container">
-            <h2><i class="fas fa-skull"></i> PIRATE ENCOUNTER!</h2>
-            <div class="ships-container">
-                <div class="ship-display">
-                    <div class="ship-icon"><i class="fas fa-rocket"></i></div>
-                    <h3>Your Ship</h3>
-                    <div class="ship-stats">
-                        <div>Hull: <span id="player-hull">100%</span></div>
-                        <div>Damage: <span id="player-damage">10</span></div>
-                        <div>Evasion: <span id="player-evasion">15%</span></div>
-                        <div>Shields: <span id="player-shields">20%</span></div>
-                    </div>
-                </div>
-                <div class="ship-display">
-                    <div class="ship-icon"><i class="fas fa-pirate-ship"></i></div>
-                    <h3 id="pirate-name">Bandit Marauder</h3>
-                    <div class="ship-stats">
-                        <div>Hull: <span id="pirate-hull">100%</span></div>
-                        <div>Damage: <span id="pirate-damage">8</span></div>
-                        <div>Accuracy: <span id="pirate-accuracy">60%</span></div>
-                        <div>Tier: <span id="pirate-tier">T3</span></div>
-                    </div>
-                </div>
+    <!-- Unified Encounter Modal -->
+    <div id="encounter-modal" class="encounter-modal">
+        <div class="encounter-container">
+            <h2><i class="fas" id="encounter-icon"></i> <span id="encounter-title"></span></h2>
+            <div id="encounter-content">
+                <!-- Dynamic content based on encounter type -->
             </div>
-            <div id="combat-log" style="height: 80px; overflow-y: auto; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px; margin: 12px 0; font-size: 14px;">
-                <p>Pirates are attacking! Choose your action.</p>
-            </div>
-            <div class="combat-options">
-                <button class="combat-btn attack" id="attack-btn"><i class="fas fa-fist-raised"></i> ATTACK</button>
-                <button class="combat-btn evade" id="evade-btn"><i class="fas fa-sync-alt"></i> EVADE</button>
-                <button class="combat-btn escape" id="escape-btn"><i class="fas fa-running"></i> ESCAPE</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Police Encounter Modal -->
-    <div id="police-modal" class="police-modal">
-        <div class="police-container">
-            <h2><i class="fas fa-shield-alt"></i> POLICE INSPECTION</h2>
-            <div id="police-message" style="margin: 20px 0;">
-                Galactic Patrol has intercepted your ship for a routine cargo inspection.
-            </div>
-            <div id="illegal-goods-found" style="margin: 15px 0; color: #ff6666; display: none;">
-                <p><i class="fas fa-exclamation-triangle"></i> Illegal goods detected!</p>
-                <p id="confiscated-goods"></p>
-                <p id="fine-amount"></p>
-            </div>
-            <div id="no-illegal-goods" style="margin: 15px 0; color: #66ff99; display: none;">
-                <p><i class="fas fa-check-circle"></i> No illegal goods found. You may proceed.</p>
-            </div>
-            <div class="combat-options">
-                <button class="combat-btn" id="comply-btn" style="background: linear-gradient(to bottom, #3366cc, #2244aa);">
-                    <i class="fas fa-check"></i> COMPLY
-                </button>
-                <button class="combat-btn attack" id="attack-police-btn">
-                    <i class="fas fa-fist-raised"></i> ATTACK
-                </button>
-            </div>
+            <div id="encounter-log" style="height: 80px; overflow-y: auto; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px; margin: 12px 0; font-size: 14px;"></div>
+            <div id="encounter-options" class="combat-options"></div>
         </div>
     </div>
     
@@ -89,12 +38,10 @@
             <h1>GALACTIC TRADER</h1>
             <div class="subtitle">Mobile Edition - Explore, Trade, Battle!</div>
         </header>
-        
         <!-- Init Screen -->
         <div id="init-screen" class="init-screen">
             <h2>CREATE YOUR GALAXY</h2>
             <p>Select the size of your trading galaxy:</p>
-            
             <div class="galaxy-size-selector">
                 <div class="size-option" data-size="40">
                     <h3><i class="fas fa-star"></i> SMALL GALAXY</h3>
@@ -112,12 +59,10 @@
                     <p>For experienced traders</p>
                 </div>
             </div>
-            
             <div style="margin-top: 30px; font-size: 14px; color: #88aaff;">
                 <p><i class="fas fa-info-circle"></i> Click on a galaxy size to start</p>
             </div>
         </div>
-        
         <!-- Game Content (hidden by default) -->
         <div id="game-content" class="main-content" style="display: none;">
             <div class="map-container">
@@ -128,7 +73,6 @@
                 <div class="crt-overlay"></div>
                 <div id="notification" class="notification"></div>
                 <div id="system-info-panel" class="system-info-panel"></div>
-                
                 <!-- Map movement controls -->
                 <div class="map-move-controls">
                     <div class="map-move-btn" id="move-left"><i class="fas fa-arrow-left"></i></div>
@@ -137,7 +81,6 @@
                     <div class="map-move-btn" id="move-down"><i class="fas fa-arrow-down"></i></div>
                 </div>
             </div>
-            
             <div class="ui-panel">
                 <div class="tabs">
                     <div class="tab active" data-tab="status"><i class="fas fa-info-circle"></i> Status</div>
@@ -147,7 +90,6 @@
                     <div class="tab" data-tab="overview"><i class="fas fa-globe"></i> Overview</div>
                     <div class="tab" data-tab="contracts"><i class="fas fa-file-contract"></i> Contracts</div>
                 </div>
-                
                 <div class="tab-content">
                     <!-- Status Tab -->
                     <div class="panel-section status-tab">
@@ -170,7 +112,6 @@
                                 <span class="stat-value" id="hull">100%</span>
                             </div>
                         </div>
-                        
                         <h2 style="margin-top: 15px;"><i class="fas fa-bullseye"></i> TARGET SYSTEM</h2>
                         <div class="stats-grid">
                             <div class="stat">
@@ -186,7 +127,6 @@
                                 <span class="stat-value" id="fuel-cost">0</span>
                             </div>
                         </div>
-                        
                         <div class="mobile-controls">
                             <button id="travel-btn" class="btn btn-action mobile-btn">
                                 <i class="fas fa-space-shuttle"></i> TRAVEL
@@ -196,7 +136,6 @@
                             </button>
                         </div>
                     </div>
-                    
                     <!-- Market Tab -->
                     <div class="panel-section market-tab" style="display: none;">
                         <h2><i class="fas fa-coins"></i> LOCAL MARKET</h2>
@@ -205,11 +144,9 @@
                             <div class="market-header">BUY</div>
                             <div class="market-header">SELL</div>
                             <div class="market-header">ACTIONS</div>
-                            
                             <!-- Filled dynamically -->
                         </div>
                     </div>
-                    
                     <!-- Cargo Tab -->
                     <div class="panel-section cargo-tab" style="display: none;">
                         <h2><i class="fas fa-boxes"></i> CARGO HOLD</h2>
@@ -222,17 +159,14 @@
                             <!-- Filled dynamically -->
                         </div>
                     </div>
-                    
                     <!-- Shipyard Tab -->
                     <div class="panel-section shipyard-tab" style="display: none;">
                         <h2><i class="fas fa-hard-hat"></i> SHIP UPGRADES</h2>
                         <p id="shipyard-status">Shipyard services not available in this system</p>
-                        
                         <div class="ship-shop" id="ship-upgrades">
                             <!-- Filled dynamically -->
                         </div>
                     </div>
-                    
                     <!-- System Overview Tab -->
                     <div class="panel-section overview-tab" style="display: none;">
                         <h2><i class="fas fa-globe"></i> SYSTEM OVERVIEW</h2>
@@ -259,13 +193,11 @@
                                 <div id="overview-pirate-chance">-</div>
                             </div>
                         </div>
-                        
                         <h2 style="margin-top: 15px;"><i class="fas fa-satellite"></i> NEARBY SYSTEMS</h2>
                         <div id="nearby-systems">
                             <!-- Filled dynamically -->
                         </div>
                     </div>
-                    
                     <!-- Contracts Tab -->
                     <div class="panel-section contracts-tab" style="display: none;">
                         <h2><i class="fas fa-file-contract"></i> AVAILABLE CONTRACTS</h2>
@@ -278,6 +210,45 @@
         </div>
     </div>
     <!-- Main Game Script -->
-    <script type="module" src="GT1.js"></script>
+    <script type="module">
+        import { GameState } from './GameState.js';
+        import { EncounterManager } from './EncounterManager.js';
+        import { UI } from './UI.js';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const gameState = new GameState();
+            const encounterManager = new EncounterManager(gameState);
+            const ui = new UI(gameState, encounterManager);
+            
+            // Initialize the game
+            window.addEventListener('load', () => {
+                // Galaxy size selection
+                document.querySelectorAll('.size-option').forEach(option => {
+                    option.addEventListener('click', () => {
+                        // Highlight selection
+                        document.querySelectorAll('.size-option').forEach(o => o.classList.remove('selected'));
+                        option.classList.add('selected');
+                        
+                        // Start game after brief pause
+                        setTimeout(() => {
+                            const size = parseInt(option.dataset.size);
+                            const initScreen = document.getElementById('init-screen');
+                            const gameContent = document.getElementById('game-content');
+                            if (initScreen) initScreen.style.display = 'none';
+                            if (gameContent) gameContent.style.display = 'flex';
+                            
+                            // Initialize game with callback
+                            gameState.initGame(size, () => {
+                                ui.setupCanvas();
+                                ui.setupEventListeners();
+                                ui.updateUI();
+                                ui.showNotification(`Welcome to ${gameState.currentSystem.name}!`);
+                            });
+                        }, 300);
+                    });
+                });
+            });
+        });
+    </script>
 </body>
 </html>
