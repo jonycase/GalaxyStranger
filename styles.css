@@ -509,7 +509,7 @@ h2 i {
     .ui-panel {
         flex: 1;
         height: auto;
-        padding-bottom: 15%;
+        padding-bottom: 25%;
     }
 }
 
@@ -533,6 +533,7 @@ h2 i {
     
     .panel-section {
         padding: 10px;
+        padding-bottom: 25%;
     }
     
     h2 {
