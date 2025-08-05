@@ -2,7 +2,7 @@
   "name": "galactic-trader",
   "version": "1.0.0",
   "scripts": {
-    "start": "esbuild index.js --bundle --outfile=bin/main.js --jsx-factory=m --jsx-fragment='\"[\"' --watch"
+    "start": "esbuild index.js --bundle --outfile=bin/main.js --watch"
   },
   "dependencies": {
     "http-server": "^14.1.1",
