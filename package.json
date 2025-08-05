@@ -2,10 +2,27 @@
   "name": "galactic-trader",
   "version": "1.0.0",
   "scripts": {
-    "start": "http-server -c-1 -p 8080 --open"
+    "start": "esbuild index.js --bundle --outfile=bin/main.js --jsx-factory=m --jsx-fragment='\"[\"' --watch"
   },
   "dependencies": {
     "http-server": "^14.1.1",
     "mithril": "^2.3.3"
-  }
+  },
+  "description": "Jonycase aka Shiva",
+  "main": "index.js",
+  "devDependencies": {
+    "esbuild": "^0.25.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jonycase/GalaxyStranger.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jonycase/GalaxyStranger/issues"
+  },
+  "homepage": "https://github.com/jonycase/GalaxyStranger#readme"
 }

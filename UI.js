@@ -1,4 +1,3 @@
-import * as m from "./node_modules/mithril/mithril.js";
 export class UI {
     constructor(gameState, encounterManager) {
         this.gameState = gameState;

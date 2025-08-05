@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <div id="app"></div>
+    <script src="bin/main.js"></script>
     <!-- Loading Screen -->
     <div id="loading-screen" class="loading-screen" style="display: none;">
         <div style="font-size: 24px; margin-bottom: 20px;">Generating Galaxy...</div>
@@ -220,14 +222,12 @@
             </div>
         </div>
     </div>
-    <script>
-    </script>
+    <!-- <script src="bin/main.js"></script>
     <!-- Main Game Script -->
     <script type="module" src="GameState.js"></script>
     <script type="module" src="EncounterManager.js"></script>
     <script type="module" src="UI.js"></script>
     <script type="module">
-        import * as m from "./node_modules/mithril/mithril.js";
         import { GameState } from './GameState.js';
         import { EncounterManager } from './EncounterManager.js';
         import { UI } from './UI.js';
@@ -276,6 +276,9 @@
                 });
             });
         });
+        var root = document.body
+
+        m.render(root, "Hello world")
         class MyComponent {
             view() {
                 return m("div", "Hello Mithril!");
