@@ -149,6 +149,7 @@ h1 {
     flex-direction: column;
     gap: 15px;
     height: 45vh;
+    overflow-y: auto;
     flex-shrink: 0;
 }
 
@@ -508,6 +509,7 @@ h2 i {
     .ui-panel {
         flex: 1;
         height: auto;
+        padding-bottom: 15%;
     }
 }
 
