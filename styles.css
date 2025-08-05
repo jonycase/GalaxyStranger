@@ -508,7 +508,8 @@ h2 i {
     
     .ui-panel {
         flex: 1;
-        height: auto;
+        height: 100%;
+        scrollbar-gutter: stable both-edges;
     }
 }
 
