@@ -12,18 +12,12 @@ body {
     radial-gradient(circle at 10% 20%, rgba(40, 60, 180, 0.15) 0%, transparent 20%),
     radial-gradient(circle at 90% 80%, rgba(180, 60, 180, 0.15) 0%, transparent 20%);
     color: #e0e0ff;
-    /* Use dvh for dynamic height, with vh as fallback */
-    min-height: 100vh; /* Fallback for older browsers */
-    min-height: 100dvh; /* Dynamically adjusts to visible viewport height */
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     font-family: 'Exo 2', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    gap: 15px;
-    /* Re-evaluate fixed height: 45vh. Consider flex: 1 for more dynamic sizing. */
-    /* height: 45vh; */
-    flex: 1; /* Allow ui-panel to share space dynamically with map-container */
-    overflow-y: auto; /* Correctly allows internal scrolling */
-    flex-shrink: 0; /* Keep if ui-panel should not shrink below its content/flex-basis */
+    overflow: hidden;
+    overscroll-behavior: none;
 }
 
 /* Mobile-first design */
@@ -158,6 +152,7 @@ h1 {
     height: 45vh;
     overflow-y: auto;
     flex-shrink: 0;
+    overscroll-behavior: none;
 }
 
 .panel-section {
@@ -495,11 +490,9 @@ h2 i {
 
 /* Portrait vs Landscape adjustments */
 @media (orientation: landscape) {
-   .game-container {
+    .game-container {
         flex-direction: row;
         padding: 5px;
-        height: 110vh; /* Fallback */
-        height: 110dvh; /* Ensure full dynamic height in landscape too */
     }
     
     header {
@@ -517,11 +510,12 @@ h2 i {
     
     .ui-panel {
         flex: 1;
-        height: 110dvh;
+        height: auto;
+        overscroll-behavior: none;
     }
 }
 
-@media (max-height: 105%) {
+@media (max-height: 600px) {
     h1 {
         font-size: 22px;
     }
