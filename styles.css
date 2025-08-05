@@ -550,7 +550,7 @@ h2 i {
     }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 600px) {
     .stats-grid {
         grid-template-columns: 1fr;
         gap: 5px;
@@ -649,6 +649,7 @@ h2 i {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 5px;
+    height: -webkit-fill-available; 
 }
 
 .contract-reward {
