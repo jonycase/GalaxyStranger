@@ -1,3 +1,4 @@
+import * as m from "./node_modules/mithril/mithril.js";
 export class UI {
     constructor(gameState, encounterManager) {
         this.gameState = gameState;
@@ -6,6 +7,7 @@ export class UI {
     
     // Canvas setup and rendering
     setupCanvas() {
+    
         const galaxyCanvas = document.getElementById('galaxy-canvas');
         const systemContainer = document.getElementById('system-container');
         const shipContainer = document.getElementById('ship-container');

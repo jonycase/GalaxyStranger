@@ -227,8 +227,7 @@
     <script type="module" src="EncounterManager.js"></script>
     <script type="module" src="UI.js"></script>
     <script type="module">
-        import m from "./node_modules/mithril/mithril.js"
-        m.render(document.body, "Hello World")
+        import * as m from "./node_modules/mithril/mithril.js";
         import { GameState } from './GameState.js';
         import { EncounterManager } from './EncounterManager.js';
         import { UI } from './UI.js';
@@ -277,6 +276,11 @@
                 });
             });
         });
+        class MyComponent {
+            view() {
+                return m("div", "Hello Mithril!");
+            }
+        }
     </script>
 </body>
 </html>
