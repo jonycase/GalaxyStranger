@@ -495,9 +495,11 @@ h2 i {
 
 /* Portrait vs Landscape adjustments */
 @media (orientation: landscape) {
-    .game-container {
+   .game-container {
         flex-direction: row;
         padding: 5px;
+        height: 100vh; /* Fallback */
+        height: 100dvh; /* Ensure full dynamic height in landscape too */
     }
     
     header {
