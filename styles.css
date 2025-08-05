@@ -550,7 +550,7 @@ h2 i {
     }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 480px) {
     .stats-grid {
         grid-template-columns: 1fr;
         gap: 5px;
