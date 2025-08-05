@@ -1,3 +1,11 @@
+const resizer = () => {
+    document.getElementByI("ui-panel").style.height = window.innerHeight + "px";
+}
+
+window.addEventListener("resize", (_e) => resizer());
+
+document.addEventListener("DOMContentLoaded", (_e) => resizer());
+
 export class UI {
     constructor(gameState, encounterManager) {
         this.gameState = gameState;
