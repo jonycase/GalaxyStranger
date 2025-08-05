@@ -498,8 +498,8 @@ h2 i {
    .game-container {
         flex-direction: row;
         padding: 5px;
-        height: 100vh; /* Fallback */
-        height: 100dvh; /* Ensure full dynamic height in landscape too */
+        height: 110vh; /* Fallback */
+        height: 110dvh; /* Ensure full dynamic height in landscape too */
     }
     
     header {
@@ -517,11 +517,11 @@ h2 i {
     
     .ui-panel {
         flex: 1;
-        height: auto;
+        height: 110dvh;
     }
 }
 
-@media (max-height: 600px) {
+@media (max-height: 105%) {
     h1 {
         font-size: 22px;
     }
