@@ -220,11 +220,15 @@
             </div>
         </div>
     </div>
+    <script>
+    </script>
     <!-- Main Game Script -->
     <script type="module" src="GameState.js"></script>
     <script type="module" src="EncounterManager.js"></script>
     <script type="module" src="UI.js"></script>
     <script type="module">
+        import m from "./node_modules/mithril/mithril.js"
+        m.render(document.body, "Hello World")
         import { GameState } from './GameState.js';
         import { EncounterManager } from './EncounterManager.js';
         import { UI } from './UI.js';
