@@ -151,6 +151,7 @@ h1 {
     height: 45vh;
     overflow-y: auto;
     flex-shrink: 0;
+    padding-bottom: 25%;
 }
 
 .panel-section {
