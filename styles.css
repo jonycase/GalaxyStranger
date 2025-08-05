@@ -17,7 +17,6 @@ body {
     flex-direction: column;
     font-family: 'Exo 2', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     overflow: hidden;
-    overscroll-behavior: none;
 }
 
 /* Mobile-first design */
@@ -152,7 +151,6 @@ h1 {
     height: 45vh;
     overflow-y: auto;
     flex-shrink: 0;
-    overscroll-behavior: none;
 }
 
 .panel-section {
@@ -511,7 +509,6 @@ h2 i {
     .ui-panel {
         flex: 1;
         height: auto;
-        overscroll-behavior: none;
     }
 }
 
