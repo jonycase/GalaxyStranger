@@ -18,20 +18,6 @@ body {
     font-family: 'Exo 2', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     overflow: hidden;
 }
-/* Add to body.traveling */
-body.traveling::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 10, 30, 0.7);
-    z-index: 1000;
-    pointer-events: none;
-    opacity: 0;
-    animation: travel-overlay 1s infinite alternate;
-}
 
 @keyframes travel-overlay {
     from { opacity: 0.3; }
@@ -227,6 +213,22 @@ h1 {
     height: 45vh;
     overflow: auto;
     flex-shrink: 1;
+}
+
+/* Add new rule for UI panel only */
+.ui-panel.traveling::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 10, 30, 0.7);
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    animation: travel-overlay 1s infinite alternate;
+    border-radius: 10px;
 }
 
 .panel-section {

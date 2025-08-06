@@ -18,7 +18,7 @@ export class UI {
             x: 0,
             y: 0,
             zoom: 6,
-            minZoom: 5,
+            minZoom: 3,
             maxZoom: 10
         };
         this.isDragging = false;
@@ -136,7 +136,7 @@ export class UI {
     centerCameraOnShip() {
         this.camera.x = this.gameState.ship.x;
         this.camera.y = this.gameState.ship.y;
-        this.camera.zoom = 1.0;
+        this.camera.zoom = 3.0;
         // Adjust zoom based on galaxy size this.camera.zoom = Math.max(0.5, Math.min(2.5, 2000 / this.gameState.galaxySize));
         this.updateGalaxyView();
     }
@@ -623,7 +623,7 @@ export class UI {
             document.querySelectorAll('button').forEach(btn => {
                 btn.disabled = true;
             });
-            document.body.classList.add('traveling'); // Add class for visual indication
+            document.querySelector('.ui-panel').classList.add('traveling');
 
             this.showNotification(result.message);
             
@@ -662,7 +662,7 @@ export class UI {
                     document.querySelectorAll('button').forEach(btn => {
                         btn.disabled = false;
                     });
-                    document.body.classList.remove('traveling'); // Remove class for visual indication
+                    document.querySelector('.ui-panel').classList.remove('traveling');
 
                     // Remove the 'traveling' class to stop the effect
                     if (this.shipIndicatorEl) {
