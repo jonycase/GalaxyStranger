@@ -14,7 +14,10 @@
 </head>
 <body>
     <div id="app"></div>
-    <script src="bin/main.js"></script>
+    <!-- This script seems to be for a different framework (Mithril) and is not used by the main game logic.
+         If you are not using it, it can be safely removed. -->
+    <!-- <script src="bin/main.js"></script> -->
+    
     <!-- Loading Screen -->
     <div id="loading-screen" class="loading-screen" style="display: none;">
         <div style="font-size: 24px; margin-bottom: 20px;">Generating Galaxy...</div>
@@ -85,17 +88,11 @@
                 <canvas id="galaxy-canvas" width="800" height="600"></canvas>
                 <div id="system-container"></div>
                 <div id="ship-container"></div>
-                <div class="travel-effect" id="travel-effect"></div>
+                <!-- The old travel effect div is removed, as the effect is now part of the ship indicator -->
                 <div class="crt-overlay"></div>
                 <div id="notification" class="notification"></div>
                 <div id="system-info-panel" class="system-info-panel"></div>
-                <!-- Map movement controls -->
-                <div class="map-move-controls">
-                    <div class="map-move-btn" id="move-left"><i class="fas fa-arrow-left"></i></div>
-                    <div class="map-move-btn" id="move-right"><i class="fas fa-arrow-right"></i></div>
-                    <div class="map-move-btn" id="move-up"><i class="fas fa-arrow-up"></i></div>
-                    <div class="map-move-btn" id="move-down"><i class="fas fa-arrow-down"></i></div>
-                </div>
+                <!-- Old map movement controls removed as per instructions -->
             </div>
             <div class="ui-panel">
                 <div class="tabs">
@@ -145,7 +142,7 @@
                         </div>
                         <div class="mobile-controls">
                             <button id="travel-btn" class="btn btn-action mobile-btn">
-                                <i class="fas fa-space-shuttle"></i> TRAVEL!!!!!!!!
+                                <i class="fas fa-space-shuttle"></i> TRAVEL
                             </button>
                             <button id="refuel-btn" class="btn mobile-btn">
                                 <i class="fas fa-gas-pump"></i> REFUEL
@@ -225,7 +222,7 @@
             </div>
         </div>
     </div>
-    <!-- <script src="bin/main.js"></script>
+    
     <!-- Main Game Script -->
     <script type="module" src="GameState.js"></script>
     <script type="module" src="EncounterManager.js"></script>
@@ -279,9 +276,6 @@
                 });
             });
         });
-        var root = document.body
-
-        m.render(root, "Hello world")
     </script>
 </body>
 </html>

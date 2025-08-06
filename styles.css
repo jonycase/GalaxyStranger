@@ -130,13 +130,49 @@ h1 {
     height: 24px;
     z-index: 20;
     pointer-events: none;
-    transition: transform 0.2s;
+    transform-origin: center center;
 }
 
 .ship-indicator i {
     font-size: 24px;
     color: #66ccff;
     text-shadow: 0 0 5px rgba(100, 180, 255, 0.7);
+    transition: all 0.3s ease;
+}
+
+/* New travel effect using a pseudo-element on the ship indicator */
+.ship-indicator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 5px;
+    height: 5px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 0 10px white, 0 0 20px #66ffff, 0 0 30px #66ccff;
+    transform: translate(-50%, -50%) scale(0);
+    transition: transform 0.5s ease-out, opacity 0.5s ease-out;
+    opacity: 0;
+    z-index: -1; /* Place effect behind the ship icon */
+}
+
+/* Activate the effect when the .traveling class is added */
+.ship-indicator.traveling::after {
+    transform: translate(-50%, -50%) scale(2.5);
+    opacity: 1;
+    animation: travel-pulse 1s infinite alternate;
+}
+
+@keyframes travel-pulse {
+    from {
+        transform: translate(-50%, -50%) scale(2.5);
+        opacity: 1;
+    }
+    to {
+        transform: translate(-50%, -50%) scale(3.5);
+        opacity: 0.7;
+    }
 }
 
 .ui-panel {
@@ -246,8 +282,8 @@ h2 i {
 
 .btn-action {
     background: linear-gradient(to bottom, #4a4a9a, #3a3a7a);
-    font-size: 32px;
-    padding-top: 100px;
+    font-size: 16px; /* Adjusted from 32px */
+    padding: 12px;  /* Adjusted from 100px top padding */
 }
 
 .btn-buy {
@@ -333,22 +369,9 @@ h2 i {
     width: max-content;
 }
 
-.travel-effect {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 5;
-}
-
-.star-trail {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    background: radial-gradient(circle, rgba(100, 150, 255, 0.3) 0%, transparent 70%);
-    opacity: 0;
+/* Old travel effect styles are no longer needed */
+.travel-effect, .star-trail {
+    display: none;
 }
 
 /* Unified Encounter Modal Styles */
@@ -660,17 +683,11 @@ h2 i {
     font-size: 12px;
 }
 
-.map-move-controls {
+/* Camera controls */
+.map-center-btn {
     position: absolute;
-    bottom: 10px;
+    bottom: 60px;
     right: 10px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 5px;
-    z-index: 40;
-}
-
-.map-move-btn {
     width: 40px;
     height: 40px;
     background: rgba(20, 30, 60, 0.8);
@@ -682,6 +699,18 @@ h2 i {
     color: #66ccff;
     font-size: 18px;
     cursor: pointer;
+    z-index: 50;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.map-center-btn:hover {
+    background: rgba(30, 40, 80, 0.9);
+    transform: scale(1.1);
+}
+
+/* Remove old move controls */
+.map-move-controls {
+    display: none;
 }
 
 .system-overview-grid {

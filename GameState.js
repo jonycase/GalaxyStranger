@@ -18,8 +18,7 @@ export class GameState {
             evasion: 15,
             shields: 20,
             engine: 1,
-            mapOffsetX: 0,
-            mapOffsetY: 0,
+            // Removed mapOffsetX and mapOffsetY as camera handles this
             rotation: 0
         };
         this.currentSystem = null;
@@ -97,8 +96,7 @@ export class GameState {
             evasion: 15,
             shields: 20,
             engine: 1,
-            mapOffsetX: 0,
-            mapOffsetY: 0,
+            // Removed mapOffsetX and mapOffsetY
             rotation: 0
         };
         this.currentSystem = null;
@@ -414,8 +412,8 @@ export class GameState {
         // Update game state for travel
         this.ship.traveling = true;
         this.ship.travelProgress = 0;
-        this.ship.x = this.currentSystem.x;
-        this.ship.y = this.currentSystem.y;
+        this.ship.x = this.currentSystem.x; // Set ship's starting X
+        this.ship.y = this.currentSystem.y; // Set ship's starting Y
         this.ship.targetX = this.targetSystem.x;
         this.ship.targetY = this.targetSystem.y;
         
@@ -450,9 +448,7 @@ export class GameState {
         // Restock current system
         this.restockSystem(this.currentSystem);
         
-        // Reset map position
-        this.ship.mapOffsetX = 0;
-        this.ship.mapOffsetY = 0;
+        // No need to reset mapOffsetX/Y, camera handles positioning
         
         return { success: true, message: `Arrived at ${this.currentSystem.name}` };
     }
