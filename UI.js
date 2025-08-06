@@ -3,6 +3,9 @@ function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+// Add this at the top of the file
+let isTraveling = false;
+
 export class UI {
     constructor(gameState, encounterManager) {
         this.gameState = gameState;
@@ -14,13 +17,21 @@ export class UI {
         this.camera = {
             x: 0,
             y: 0,
-            zoom: 1.0,
-            minZoom: 0.5,
-            maxZoom: 2.0
+            zoom: 7,
+            minZoom: 7,
+            maxZoom: 10
         };
         this.isDragging = false;
         this.lastTouchDistance = 0;
         this.galaxyCanvas = null; // Will be set in setupCanvas
+
+        // Add this at the top of the UI class constructor
+        document.addEventListener('click', (e) => {
+            if (isTraveling && e.target.closest('button')) {
+                this.showNotification("Cannot interact while traveling!");
+                e.preventDefault();
+            }
+        }, true);
     }
     
     // Canvas setup and rendering with camera support
@@ -65,6 +76,8 @@ export class UI {
             galaxyCtx.arc(x, y, radius, 0, Math.PI * 2);
             galaxyCtx.fill();
         }
+        
+        // Adjust camera zoom based on galaxy size this.camera.zoom = Math.max(0.5, Math.min(2.5, 2000 / this.gameState.galaxySize));
         
         // Draw star systems as DOM elements with camera transformation
         systemContainer.innerHTML = '';
@@ -123,8 +136,9 @@ export class UI {
     centerCameraOnShip() {
         this.camera.x = this.gameState.ship.x;
         this.camera.y = this.gameState.ship.y;
-        this.camera.zoom = 1.0;
-        this.updateGalaxyView(); // Update view after centering
+        
+        // Adjust zoom based on galaxy size this.camera.zoom = Math.max(0.5, Math.min(2.5, 2000 / this.gameState.galaxySize));
+        this.updateGalaxyView();
     }
 
     // Move the camera by a given delta
@@ -594,12 +608,23 @@ export class UI {
         // MODIFIED: Travel button logic completely overhauled
         const travelBtn = document.getElementById('travel-btn');
         if (travelBtn) travelBtn.addEventListener('click', () => {
+            if (isTraveling) {
+                this.showNotification("Already traveling!");
+                return;
+            }
+
             const result = this.gameState.travelToSystem();
             if (!result.success) {
                 this.showNotification(result.message);
                 return;
             }
             
+            isTraveling = true; // Set travel flag
+            document.querySelectorAll('button').forEach(btn => {
+                btn.disabled = true;
+            });
+            document.body.classList.add('traveling'); // Add class for visual indication
+
             this.showNotification(result.message);
             
             // Add the 'traveling' class to the ship indicator to activate the CSS effect
@@ -633,6 +658,12 @@ export class UI {
                     requestAnimationFrame(animateTravel);
                 } else {
                     // Travel complete
+                    isTraveling = false; // Reset travel flag
+                    document.querySelectorAll('button').forEach(btn => {
+                        btn.disabled = false;
+                    });
+                    document.body.classList.remove('traveling'); // Remove class for visual indication
+
                     // Remove the 'traveling' class to stop the effect
                     if (this.shipIndicatorEl) {
                         this.shipIndicatorEl.classList.remove('traveling');
@@ -754,11 +785,11 @@ export class UI {
             const startZoom = this.camera.zoom;
             const targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, newZoom));
             const startTime = Date.now();
-            const duration = 300;
+            const duration = 600;
             
             const animateZoom = () => {
                 const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
+                const progress = Math.min(elapsed / duration * 50 , 1);
                 const easedProgress = easeInOutCubic(progress);
                 
                 this.camera.zoom = startZoom + (targetZoom - startZoom) * easedProgress;
@@ -817,10 +848,17 @@ export class UI {
         centerBtn.className = 'map-center-btn';
         centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
         centerBtn.addEventListener('click', () => {
+            // Calculate screen position of ship
+            const screenX = (this.gameState.ship.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
+            const screenY = (this.gameState.ship.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
+            
+            // Calculate camera adjustment to center ship
+            const targetCameraX = this.gameState.ship.x - (this.galaxyCanvas.width / 2 / this.camera.zoom);
+            const targetCameraY = this.gameState.ship.y - (this.galaxyCanvas.height / 2 / this.camera.zoom);
+            
             // Smooth camera centering
             const startX = this.camera.x;
             const startY = this.camera.y;
-            const startZoom = this.camera.zoom;
             const startTime = Date.now();
             const duration = 500;
             
@@ -829,9 +867,8 @@ export class UI {
                 const progress = Math.min(elapsed / duration, 1);
                 const easedProgress = easeInOutCubic(progress);
                 
-                this.camera.x = startX + (this.gameState.ship.x - startX) * easedProgress;
-                this.camera.y = startY + (this.gameState.ship.y - startY) * easedProgress;
-                this.camera.zoom = startZoom + (1.0 - startZoom) * easedProgress;
+                this.camera.x = startX + (targetCameraX - startX) * easedProgress;
+                this.camera.y = startY + (targetCameraY - startY) * easedProgress;
                 this.updateGalaxyView();
                 
                 if (progress < 1) {

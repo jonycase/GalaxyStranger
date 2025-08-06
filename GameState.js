@@ -75,6 +75,12 @@ export class GameState {
         this.distanceTraveled = 0;
         this.systemsVisited = 1;
         this.gameOver = false;
+        
+        // New properties for galaxy dimensions and shape
+        this.galaxyWidth = 0;
+        this.galaxyHeight = 0;
+        this.minDistance = 0;
+        this.galaxyShape = 'balanced'; // Default shape
     }
     
     initGame(size, callback) {
@@ -108,6 +114,13 @@ export class GameState {
         this.systemsVisited = 1;
         this.gameOver = false;
         
+        // Calculate galaxy dimensions based on size
+        this.galaxyWidth = 600 + size;
+        this.galaxyHeight = 400 + size * 0.5;
+        
+        // Adjust minimum distance between systems
+        this.minDistance = 30 * Math.sqrt(40 / size); // Scale distance based on galaxy size
+        
         this.showLoadingScreen();
         // Use a timeout to allow the loading screen to render
         setTimeout(() => {
@@ -140,74 +153,139 @@ export class GameState {
         if (loadingText) loadingText.textContent = message;
     }
     
-    // Generate galaxy with star systems
+    // Updated generateGalaxy method
     generateGalaxy() {
         this.galaxy = [];
         const systemNames = [
-            'Sol Prime', 'Alpha Centauri', 'Proxima', 'Vega', 'Sirius', 'Arcturus', 'Betelgeuse', 'Rigel',
-            'Andromeda', 'Orion', 'Pegasus', 'Cygnus', 'Lyra', 'Draco', 'Centaurus', 'Aquila',
-            'Tauri', 'Ceti', 'Eridani', 'Lacaille', 'Hercules', 'Perseus', 'Tucana', 'Phoenix'
+            'Sol Prime', 'Alpha Centauri', 'Proxima', 'Vega', 'Sirius', 'Arcturus',
+            'Betelgeuse', 'Rigel', 'Endorsun', 'Orion', 'Pegasus', 'Cygnus', 'Lyra',
+            'Draco', 'Centaurus', 'Aquila', 'Astrem', 'Orpheus', 'Sanctus', 'Tiberus',
+            'Nicta', 'Melocor', 'Veviron', 'Babylon', 'Torgus', 'Harald', 'Svenus',
+            'Gion', 'Lectan', 'Drouran', 'Zeta Centauri', 'Yota Centauri', 'Tauri',
+            'Ceti', 'Eridani', 'Lacaille', 'Hercules', 'Perseus', 'Tucana', 'Phoenix'
         ];
-        const prefixes = ['New', 'Old', 'Great', 'Little', 'Upper', 'Lower', 'East', 'West', 'North', 'South'];
-        const suffixes = ['Prime', 'Secundus', 'Tertius', 'Quartus', 'Quintus', 'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'];
+        
+        // Improved name generation with prefix/suffix combinations
+        const prefixes = ['New', 'Old', 'Great', 'Little', 'Upper', 'Lower', 'East',
+                         'West', 'North', 'South', 'Elder', 'Ancestor', 'High'];
+        const suffixes = ['Prime', 'Secundus', 'Tertius', 'Quartus', 'Quintus', 'Alpha',
+                          'Beta', 'Gamma', 'Delta', 'Epsilon', 'Psy', 'Jeta', 'Nigmus'];
+        const nameParts = ['Vega', 'Sirius', 'Orion', 'Centauri', 'Andromeda', 'Persei',
+                           'Cygni', 'Draconis', 'Lyrae', 'Aquilae', 'Pegasi', 'Tauri'];
         
         // Generate unique system names
-        const names = new Set();
-        let nameCount = 0;
+        const names = new Set(systemNames);
         
-        // Use fixed names first
-        for (let i = 0; i < systemNames.length && names.size < this.galaxySize; i++) {
-            names.add(systemNames[i]);
-            nameCount++;
-        }
-        
-        // Generate unique names for remaining systems
+        // Create unique names for remaining systems
         while (names.size < this.galaxySize) {
-            const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-            const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
-            const num = Math.floor(1000 + Math.random() * 9000);
-            const nameCandidate = `${prefix} ${suffix} ${num}`;
+            const pattern = Math.random();
+            let nameCandidate;
+            
+            if (pattern < 0.3) {
+                // Prefix + Suffix pattern
+                const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+                const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+                nameCandidate = `${prefix} ${suffix}`;
+            } else if (pattern < 0.6) {
+                // NamePart + Number pattern
+                const namePart = nameParts[Math.floor(Math.random() * nameParts.length)];
+                const num = Math.floor(1000 + Math.random() * 9000);
+                nameCandidate = `${namePart} ${num}`;
+            } else {
+                // Prefix + NamePart pattern
+                const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+                const namePart = nameParts[Math.floor(Math.random() * nameParts.length)];
+                nameCandidate = `${prefix} ${namePart}`;
+            }
+            
             if (!names.has(nameCandidate)) {
                 names.add(nameCandidate);
-                nameCount++;
             }
         }
         
-        // Create systems with minimum distance
         const nameArray = Array.from(names);
-        const minDistance = 30;
-        let i = 0;
         
-        // Ensure we don't try to create more systems than we have names
-        const totalSystems = Math.min(this.galaxySize, nameArray.length);
+        // Adjust dimensions based on selected shape
+        if (this.galaxyShape === 'wide') {
+            this.galaxyWidth = 800 + this.galaxySize;
+            this.galaxyHeight = 400 + this.galaxySize * 0.3;
+        } else if (this.galaxyShape === 'tall') {
+            this.galaxyWidth = 500 + this.galaxySize;
+            this.galaxyHeight = 700 + this.galaxySize * 0.7;
+        } else {
+            // Balanced (default)
+            this.galaxyWidth = 600 + this.galaxySize;
+            this.galaxyHeight = 500 + this.galaxySize * 0.5;
+        }
+
+        // Create systems with minimum distance using Poisson disk sampling
+        const points = [];
+        const active = [];
+        const width = this.galaxyWidth;
+        const height = this.galaxyHeight;
+        const minDist = this.minDistance;
+        const maxAttempts = 30;
         
-        for (i = 0; i < totalSystems; i++) {
-            let validPosition = false;
-            let x, y;
-            let attempts = 0;
-            while (!validPosition && attempts < 100) {
-                x = 100 + Math.random() * 600;
-                y = 100 + Math.random() * 400;
-                validPosition = true;
+        // First point
+        const firstPoint = {
+            x: width/2 + (Math.random() - 0.5) * width * 0.2,
+            y: height/2 + (Math.random() - 0.5) * height * 0.2
+        };
+        points.push(firstPoint);
+        active.push(0);
+        
+        // Generate other points
+        while (active.length > 0 && points.length < this.galaxySize) {
+            const randIndex = Math.floor(Math.random() * active.length);
+            const point = points[active[randIndex]];
+            let found = false;
+            
+            for (let i = 0; i < maxAttempts; i++) {
+                // Generate point in annular region around existing point
+                const angle = Math.random() * Math.PI * 2;
+                const distance = minDist + Math.random() * minDist;
+                const newPoint = {
+                    x: point.x + Math.cos(angle) * distance,
+                    y: point.y + Math.sin(angle) * distance
+                };
                 
-                // Check distance to existing systems
-                for (const system of this.galaxy) {
-                    const dx = system.x - x;
-                    const dy = system.y - y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    if (distance < minDistance) {
-                        validPosition = false;
+                // Check boundaries
+                if (newPoint.x < 100 || newPoint.x > width - 100 ||
+                    newPoint.y < 100 || newPoint.y > height - 100) {
+                    continue;
+                }
+                
+                // Check distance to other points
+                let valid = true;
+                for (const p of points) {
+                    const dx = p.x - newPoint.x;
+                    const dy = p.y - newPoint.y;
+                    if (Math.sqrt(dx*dx + dy*dy) < minDist) {
+                        valid = false;
                         break;
                     }
                 }
-                attempts++;
+                
+                if (valid) {
+                    points.push(newPoint);
+                    active.push(points.length - 1);
+                    found = true;
+                    break;
+                }
             }
             
-            // If we couldn't find a valid position, skip this system
-            if (!validPosition) {
-                continue;
+            if (!found) {
+                active.splice(randIndex, 1);
             }
             
+            // Update loading progress
+            const percent = Math.round(points.length / this.galaxySize * 100);
+            this.updateLoadingProgress(percent, `Creating system: ${points.length}/${this.galaxySize}`);
+        }
+        
+        // Create systems at generated points
+        for (let i = 0; i < points.length && i < this.galaxySize; i++) {
+            const point = points[i];
             const economy = this.economyTypes[Math.floor(Math.random() * this.economyTypes.length)];
             const techLevel = this.techLevels[Math.floor(Math.random() * this.techLevels.length)];
             const security = this.securityLevels[Math.floor(Math.random() * this.securityLevels.length)];
@@ -215,8 +293,8 @@ export class GameState {
             const system = {
                 id: i,
                 name: nameArray[i],
-                x: x,
-                y: y,
+                x: point.x,
+                y: point.y,
                 economy: economy,
                 techLevel: techLevel,
                 security: security,
@@ -226,7 +304,7 @@ export class GameState {
                 daysSinceRestock: 0
             };
             
-            // Generate market prices based on production type
+            // Generate market prices (existing code)
             this.goods.forEach(good => {
                 // Base price modifier based on production
                 let baseModifier = 1;

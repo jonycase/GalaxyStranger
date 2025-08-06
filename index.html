@@ -78,10 +78,19 @@
                     <p>For experienced traders</p>
                 </div>
             </div>
+            
+            <div class="galaxy-shape-selector" style="margin-top: 20px;">
+                <h3>Galaxy Shape</h3>
+                <div class="shape-option selected" data-shape="balanced">Balanced</div>
+                <div class="shape-option" data-shape="wide">Wide</div>
+                <div class="shape-option" data-shape="tall">Tall</div>
+            </div>
+            
             <div style="margin-top: 30px; font-size: 14px; color: #88aaff;">
                 <p><i class="fas fa-info-circle"></i> Click on a galaxy size to start</p>
             </div>
         </div>
+        
         <!-- Game Content (hidden by default) -->
         <div id="game-content" class="main-content" style="display: none;">
             <div class="map-container">
@@ -222,11 +231,7 @@
             </div>
         </div>
     </div>
-    
     <!-- Main Game Script -->
-    <script type="module" src="GameState.js"></script>
-    <script type="module" src="EncounterManager.js"></script>
-    <script type="module" src="UI.js"></script>
     <script type="module">
         import { GameState } from './GameState.js';
         import { EncounterManager } from './EncounterManager.js';
@@ -246,6 +251,9 @@
                         document.querySelectorAll('.size-option').forEach(o => o.classList.remove('selected'));
                         option.classList.add('selected');
                         
+                        // Get selected shape
+                        const shape = document.querySelector('.shape-option.selected')?.dataset.shape || 'balanced';
+
                         // Start game after brief pause
                         setTimeout(() => {
                             const size = parseInt(option.dataset.size);
@@ -254,7 +262,8 @@
                             if (initScreen) initScreen.style.display = 'none';
                             if (gameContent) gameContent.style.display = 'flex';
                             
-                            // Initialize game with callback
+                            // Store shape in gameState and initialize game with callback
+                            gameState.galaxyShape = shape; 
                             gameState.initGame(size, () => {
                                 ui.setupCanvas();
                                 ui.setupEventListeners();
@@ -265,6 +274,14 @@
                     });
                 });
                 
+                // Add shape selection
+                document.querySelectorAll('.shape-option').forEach(option => {
+                    option.addEventListener('click', () => {
+                        document.querySelectorAll('.shape-option').forEach(o => o.classList.remove('selected'));
+                        option.classList.add('selected');
+                    });
+                });
+
                 // Game Over Screen Event Listener
                 document.getElementById('new-game-btn').addEventListener('click', () => {
                     const gameOverScreen = document.getElementById('game-over-screen');
