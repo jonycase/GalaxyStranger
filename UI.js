@@ -17,8 +17,8 @@ export class UI {
         this.camera = {
             x: 0,
             y: 0,
-            zoom: 7,
-            minZoom: 7,
+            zoom: 6,
+            minZoom: 5,
             maxZoom: 10
         };
         this.isDragging = false;
@@ -136,7 +136,7 @@ export class UI {
     centerCameraOnShip() {
         this.camera.x = this.gameState.ship.x;
         this.camera.y = this.gameState.ship.y;
-        
+        this.camera.zoom = 1.0;
         // Adjust zoom based on galaxy size this.camera.zoom = Math.max(0.5, Math.min(2.5, 2000 / this.gameState.galaxySize));
         this.updateGalaxyView();
     }
@@ -848,17 +848,10 @@ export class UI {
         centerBtn.className = 'map-center-btn';
         centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
         centerBtn.addEventListener('click', () => {
-            // Calculate screen position of ship
-            const screenX = (this.gameState.ship.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
-            const screenY = (this.gameState.ship.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
-            
-            // Calculate camera adjustment to center ship
-            const targetCameraX = this.gameState.ship.x - (this.galaxyCanvas.width / 2 / this.camera.zoom);
-            const targetCameraY = this.gameState.ship.y - (this.galaxyCanvas.height / 2 / this.camera.zoom);
-            
             // Smooth camera centering
             const startX = this.camera.x;
             const startY = this.camera.y;
+            const startZoom = this.camera.zoom;
             const startTime = Date.now();
             const duration = 500;
             
@@ -867,8 +860,8 @@ export class UI {
                 const progress = Math.min(elapsed / duration, 1);
                 const easedProgress = easeInOutCubic(progress);
                 
-                this.camera.x = startX + (targetCameraX - startX) * easedProgress;
-                this.camera.y = startY + (targetCameraY - startY) * easedProgress;
+                this.camera.x = startX + (this.gameState.ship.x - startX) * easedProgress;
+                this.camera.y = startY + (this.gameState.ship.y - startY) * easedProgress;
                 this.updateGalaxyView();
                 
                 if (progress < 1) {
