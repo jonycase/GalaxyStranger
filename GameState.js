@@ -37,6 +37,11 @@ export class GameState {
         this.restockIntervalMax = 10;
         this.fullRestockIntervalMin = 11;
         this.fullRestockIntervalMax = 14;
+        this.bounty = 0; // Initialize bounty to 0
+        // Add radar level to ship
+        this.ship = {
+            radar: 0 // 0 = no radar
+        };
         
         this.goods = [
             { id: 'food', name: 'Food Rations', basePrice: 10, volatility: 3, production: ['agricultural'], illegal: false },
@@ -66,7 +71,8 @@ export class GameState {
             { id: 'engine', name: 'Quantum Engine', description: 'Increases evasion chance', cost: 2500, effect: 5, icon: 'fas fa-tachometer-alt' },
             { id: 'shields', name: 'Deflector Shields', description: 'Increases shield strength', cost: 3500, effect: 10, icon: 'fas fa-atom' },
             { id: 'cargo', name: 'Expanded Cargo', description: 'Increases cargo capacity', cost: 1500, effect: 10, icon: 'fas fa-boxes' },
-            { id: 'fuel', name: 'Fuel Tanks', description: 'Increases fuel capacity', cost: 1800, effect: 5, icon: 'fas fa-gas-pump' }
+            { id: 'fuel', name: 'Fuel Tanks', description: 'Increases fuel capacity', cost: 1800, effect: 5, icon: 'fas fa-gas-pump' },
+            { id: 'radar', name: 'Long-Range Radar', description: 'Allows scanning nearby systems', cost: 4000, effect: 15, icon: 'fas fa-satellite' }
         ];
         
         this.loan = {
@@ -78,8 +84,8 @@ export class GameState {
         this.contracts = [];
         this.encounters = [
             { type: 'pirate', name: 'Pirate Attack', weight: 30 },
-            { type: 'police', name: 'Police Inspection', weight: 20 },
-            { type: 'trader', name: 'Wandering Trader', weight: 15 },
+            { type: 'police', name: 'Police Inspection', weight: 30 },
+            { type: 'trader', name: 'Wandering Trader', weight: 10 },
             { type: 'debris', name: 'Space Debris Field', weight: 15 },
             { type: 'distress', name: 'Distress Signal', weight: 10 },
             { type: 'anomaly', name: 'Spatial Anomaly', weight: 10 }
@@ -126,6 +132,7 @@ export class GameState {
         this.distanceTraveled = 0;
         this.systemsVisited = 1;
         this.gameOver = false;
+        this.ship.radar = 0;
         
         // Calculate galaxy dimensions
         this.calculateGalaxyDimensions();
@@ -625,6 +632,11 @@ export class GameState {
         this.currentSystem = this.targetSystem;
         this.targetSystem = null;
         
+        // Mark system as discovered
+        if (!this.currentSystem.discovered) {
+            this.currentSystem.discovered = true;
+        }
+        
         // Add days traveled to total
         const distance = this.calculateDistance(
             {x: this.ship.x, y: this.ship.y}, 
@@ -642,8 +654,44 @@ export class GameState {
         return { success: true, message: `Arrived at ${this.currentSystem.name}` };
     }
     
+    // Scan nearby systems
+    scanNearbySystems() {
+        // Check if player has radar
+        if (this.ship.radar === 0) {
+            return { success: false, message: "You need radar to scan systems!" };
+        }
+        const baseCost = 25;
+        const baseRadius = 15;
+        const cost = Math.max(5, baseCost - this.ship.radar);
+        const radius = baseRadius + (5 * this.ship.radar);
+        // Check fuel
+        if (this.fuel < cost) {
+            return { success: false, message: `Not enough fuel! Need ${cost} units.` };
+        }
+        
+        // Deduct fuel
+        this.fuel -= cost;
+        
+        // Find systems within radius
+        let discoveredCount = 0;
+        this.galaxy.forEach(system => {
+            if (system === this.currentSystem) return; // Skip current
+            
+            const distance = this.calculateDistance(this.currentSystem, system);
+            if (distance <= radius && !system.discovered) {
+                system.discovered = true;
+                discoveredCount++;
+            }
+        });
+        
+        return { 
+            success: true, 
+            message: `Discovered ${discoveredCount} systems within ${radius} LY!`,
+            discoveredCount
+        };
+    }
+    
     // Refuel ship
-// Refuel ship
     refuelShip() {
         if (!this.currentSystem.hasRefuel) {
             return { success: false, message: 'No refueling facilities available!' };
@@ -657,7 +705,7 @@ export class GameState {
         // Default cost per unit if no market exists
         let costPerUnit = 15;
     
-        // Check if the current system has a market and a price for 'fuel'
+        // Check if the current system has a market and a price for 'fuel'!WARNING FOR POLICE ENC
         if (this.currentSystem.hasMarket && this.currentSystem.market['fuel']) {
             costPerUnit = this.currentSystem.market['fuel'].buyPrice;
         } else {
@@ -799,6 +847,12 @@ export class GameState {
                 return { 
                     success: true, 
                     message: `Cargo capacity increased!`
+                };
+            case 'radar':
+                this.ship.radar += 1;
+                return { 
+                    success: true, 
+                    message: `Radar upgraded to level ${this.ship.radar}!`
                 };
             case 'fuel':
                 this.maxFuel += upgrade.effect;

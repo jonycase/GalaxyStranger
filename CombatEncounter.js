@@ -184,7 +184,7 @@ export class CombatEncounter extends Encounter {
         let encounterContinues = false;
         
         // Attempt to escape
-        if (Math.random() > 0.1) {
+        if (Math.random() > 0.80) {
             playerEffect = "Escape successful!";
         } else {
             opponentDamage = Math.max(3, this.opponentStats.damage + Math.floor(Math.random() * 5));

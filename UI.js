@@ -77,8 +77,6 @@ export class UI {
             galaxyCtx.fill();
         }
         
-        // Adjust camera zoom based on galaxy size this.camera.zoom = Math.max(0.5, Math.min(2.5, 2000 / this.gameState.galaxySize));
-        
         // Draw star systems as DOM elements with camera transformation
         systemContainer.innerHTML = '';
         this.gameState.galaxy.forEach(system => {
@@ -91,24 +89,30 @@ export class UI {
             systemDot.style.left = `${screenX - 6}px`;
             systemDot.style.top = `${screenY - 6}px`;
             
-            // Set color based on economy
+            // Set color based on discovery state
             let color;
-            switch (system.economy) {
-                case 'unpopulated': color = '#bf683f'; break;
-                case 'agricultural': color = '#66cc66'; break;
-                case 'industrial': color = '#cc6666'; break;
-                case 'tech': color = '#6666cc'; break;
-                case 'mining': color = '#cccc66'; break;
-                case 'trade': color = '#cc66cc'; break;
-                case 'military': color = '#cc6666'; break;
-                default: color = '#aaaaaa';
+            if (system.discovered) {
+                // Use economy-based color for discovered systems
+                switch (system.economy) {
+                    case 'unpopulated': color = '#bf683f'; break;
+                    case 'agricultural': color = '#66cc66'; break;
+                    case 'industrial': color = '#cc6666'; break;
+                    case 'tech': color = '#6666cc'; break;
+                    case 'mining': color = '#cccc66'; break;
+                    case 'trade': color = '#cc66cc'; break;
+                    case 'military': color = '#cc6666'; break;
+                    default: color = '#aaaaaa';
+                }
+            } else {
+                // Grey for undiscovered systems
+                color = '#666666';
             }
             systemDot.style.backgroundColor = color;
             
-            // Add name label
+            // Add name label - only show name if discovered
             const systemName = document.createElement('div');
             systemName.className = 'system-name';
-            systemName.textContent = system.name;
+            systemName.textContent = system.discovered ? system.name : '???';
             systemName.style.left = `${screenX + 10}px`;
             systemName.style.top = `${screenY - 25}px`;
             
@@ -138,7 +142,6 @@ export class UI {
         this.camera.x = this.gameState.ship.x;
         this.camera.y = this.gameState.ship.y;
         this.camera.zoom = 3.0;
-        // Adjust zoom based on galaxy size this.camera.zoom = Math.max(0.5, Math.min(2.5, 2000 / this.gameState.galaxySize));
         this.updateGalaxyView();
     }
 
@@ -187,7 +190,26 @@ export class UI {
                 if (systemNameEl && systemNameEl.classList.contains('system-name')) {
                     systemNameEl.style.left = `${screenX + 10}px`;
                     systemNameEl.style.top = `${screenY - 25}px`;
+                    systemNameEl.textContent = system.discovered ? system.name : '???';
                 }
+
+                // Update system color based on discovery state
+                let color;
+                if (system.discovered) {
+                    switch (system.economy) {
+                        case 'unpopulated': color = '#bf683f'; break;
+                        case 'agricultural': color = '#66cc66'; break;
+                        case 'industrial': color = '#cc6666'; break;
+                        case 'tech': color = '#6666cc'; break;
+                        case 'mining': color = '#cccc66'; break;
+                        case 'trade': color = '#cc66cc'; break;
+                        case 'military': color = '#cc6666'; break;
+                        default: color = '#aaaaaa';
+                    }
+                } else {
+                    color = '#666666';
+                }
+                dot.style.backgroundColor = color;
 
                 dot.classList.remove('selected-system');
                 if (system === this.gameState.currentSystem) {
@@ -206,7 +228,7 @@ export class UI {
     }
 
     // UI Update
-updateUI() {
+    updateUI() {
         // Update stats
         const creditsEl = document.getElementById('credits');
         const fuelEl = document.getElementById('fuel');
@@ -225,7 +247,8 @@ updateUI() {
         
         // Update target system info
         if (this.gameState.targetSystem) {
-            if (targetSystemEl) targetSystemEl.textContent = this.gameState.targetSystem.name;
+            if (targetSystemEl) targetSystemEl.textContent = this.gameState.targetSystem.discovered ? 
+                this.gameState.targetSystem.name : 'Unknown System';
             const distance = this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
             if (distanceEl) distanceEl.textContent = Math.round(distance * 10) / 10 + ' LY';
             const fuelCost = Math.ceil(distance);
@@ -239,41 +262,46 @@ updateUI() {
         // Update market
         const marketContainer = document.querySelector('.market-grid');
         if (marketContainer && this.gameState.currentSystem) {
-            marketContainer.innerHTML = `
-                <div class="market-header">COMMODITY</div>
-                <div class="market-header">BUY</div>
-                <div class="market-header">SELL</div>
-                <div class="market-header">STOCK</div>
-                <div class="market-header">ACTIONS</div>
-            `;
-            
-            this.gameState.goods.forEach(good => {
-                const marketItem = this.gameState.currentSystem.market[good.id];
-                
-                // Add this check to prevent errors if a market item is missing
-                if (!marketItem) return;
-    
-                const marketElement = document.createElement('div');
-                marketElement.className = 'market-item';
-                
-                const illegalIndicator = marketItem.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
-                const stockIndicator = marketItem.quantity > 0 ? 
-                    `<span style="color: #66ff99;">${marketItem.quantity}</span>` : 
-                    `<span style="color: #ff6666;">0</span>`;
-                
-                marketElement.innerHTML = `
-                    <span>${illegalIndicator}${marketItem.name}</span>
-                    <span>${marketItem.buyPrice} CR</span>
-                    <span>${marketItem.sellPrice} CR</span>
-                    <span>${stockIndicator}</span>
-                    <div style="display: flex; gap: 5px; justify-content: center;">
-                        <button class="btn btn-buy" data-good="${good.id}" data-action="buy" ${marketItem.quantity <= 0 ? 'disabled' : ''}>BUY</button>
-                        <button class="btn btn-sell" data-good="${good.id}" data-action="sell">SELL</button>
-                    </div>
+            // Check if system has a market
+            if (!this.gameState.currentSystem.hasMarket) {
+                marketContainer.innerHTML = '<div class="no-market-message">Market not available in this system</div>';
+            } else {
+                marketContainer.innerHTML = `
+                    <div class="market-header">COMMODITY</div>
+                    <div class="market-header">BUY</div>
+                    <div class="market-header">SELL</div>
+                    <div class="market-header">STOCK</div>
+                    <div class="market-header">ACTIONS</div>
                 `;
                 
-                marketContainer.appendChild(marketElement);
-            });
+                this.gameState.goods.forEach(good => {
+                    const marketItem = this.gameState.currentSystem.market[good.id];
+                    
+                    // Skip if market item doesn't exist for this good
+                    if (!marketItem) return;
+        
+                    const marketElement = document.createElement('div');
+                    marketElement.className = 'market-item';
+                    
+                    const illegalIndicator = marketItem.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
+                    const stockIndicator = marketItem.quantity > 0 ? 
+                        `<span style="color: #66ff99;">${marketItem.quantity}</span>` : 
+                        `<span style="color: #ff6666;">0</span>`;
+                    
+                    marketElement.innerHTML = `
+                        <span>${illegalIndicator}${marketItem.name}</span>
+                        <span>${marketItem.buyPrice} CR</span>
+                        <span>${marketItem.sellPrice} CR</span>
+                        <span>${stockIndicator}</span>
+                        <div style="display: flex; gap: 5px; justify-content: center;">
+                            <button class="btn btn-buy" data-good="${good.id}" data-action="buy" ${marketItem.quantity <= 0 ? 'disabled' : ''}>BUY</button>
+                            <button class="btn btn-sell" data-good="${good.id}" data-action="sell">SELL</button>
+                        </div>
+                    `;
+                    
+                    marketContainer.appendChild(marketElement);
+                });
+            }
         }
         
         // Update cargo hold
@@ -288,19 +316,24 @@ updateUI() {
                 cargoContainer.appendChild(emptyItem);
             } else {
                 this.gameState.cargo.forEach(item => {
-                    const marketItem = this.gameState.currentSystem.market[item.id];
-                    
-                    // Add this check
-                    if (!marketItem) return;
-    
-                    const illegalIndicator = marketItem.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
-                    
                     const cargoItem = document.createElement('div');
                     cargoItem.className = 'cargo-item';
+                    
+                    const illegalIndicator = item.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
+                    
+                    // Check if we can sell in this system
+                    const marketItem = this.gameState.currentSystem.market?.[item.id];
+                    const canSell = this.gameState.currentSystem.hasMarket && marketItem;
+                    
                     cargoItem.innerHTML = `
                         <span>${illegalIndicator}${item.name}</span>
                         <span>${item.quantity}</span>
-                        <button class="btn btn-sell" data-good="${item.id}" data-action="sell-one">SELL</button>
+                        <button class="btn btn-sell" 
+                                data-good="${item.id}" 
+                                data-action="sell-one" 
+                                ${canSell ? '' : 'disabled'}>
+                            SELL
+                        </button>
                     `;
                     
                     cargoContainer.appendChild(cargoItem);
@@ -337,6 +370,48 @@ updateUI() {
                 } else {
                     shipyardStatusEl.textContent = 'Shipyard services not available in this system';
                 }
+            }
+        }
+        
+        // Add scan button if player has radar
+        if (this.gameState.ship.radar > 0) {
+            const scanButton = document.createElement('button');
+            scanButton.id = 'scan-btn';
+            scanButton.className = 'btn mobile-btn';
+            scanButton.innerHTML = '<i class="fas fa-satellite"></i> SCAN SYSTEMS';
+            scanButton.style.marginTop = '10px';
+            scanButton.style.width = '100%';
+
+            // Always show button but disable if no radar
+            if (this.gameState.ship.radar === 0) {
+                scanButton.disabled = true;
+                scanButton.style.opacity = '0.6';
+            }
+
+            // Find status tab and add button
+            const statusTab = document.querySelector('.status-tab');
+            if (statusTab) {
+                // Remove existing scan button if any
+                const existingBtn = document.getElementById('scan-btn');
+                if (existingBtn) existingBtn.remove();
+                
+                statusTab.appendChild(scanButton);
+                
+                // Add event listener
+                scanButton.addEventListener('click', () => {
+                    const result = this.gameState.scanNearbySystems();
+                    if (this.gameState.ship.radar === 0) {
+                        this.showNotification("You need radar to scan systems!");
+                        return;
+                    }
+                    if (result.success) {
+                        this.showNotification(result.message);
+                        this.updateGalaxyView();
+                        this.updateUI();
+                    } else {
+                        this.showNotification(result.message);
+                    }
+                });
             }
         }
         
@@ -401,26 +476,48 @@ updateUI() {
             if (overviewFuel) overviewFuel.textContent = `${this.gameState.fuel}/${this.gameState.maxFuel} units`;
             
             // Calculate refuel cost
-            let costPerUnit;
-            switch(this.gameState.currentSystem.techLevel) {
-                case 'high': costPerUnit = 10; break;
-                case 'medium': costPerUnit = 15; break;
-                case 'low': costPerUnit = 20; break;
-                default: costPerUnit = 15;
+            let costPerUnit = 0;
+            let fuelNeeded = 0;
+            let totalCost = 0;
+            
+            // Only show refuel if system has refuel capability
+            if (this.gameState.currentSystem.hasRefuel) {
+                switch(this.gameState.currentSystem.techLevel) {
+                    case 'high': costPerUnit = 10; break;
+                    case 'medium': costPerUnit = 15; break;
+                    case 'low': costPerUnit = 20; break;
+                    default: costPerUnit = 15;
+                }
+                fuelNeeded = this.gameState.maxFuel - this.gameState.fuel;
+                totalCost = fuelNeeded * costPerUnit;
             }
-            const fuelNeeded = this.gameState.maxFuel - this.gameState.fuel;
-            const totalCost = fuelNeeded * costPerUnit;
-            if (overviewRefuelCost) overviewRefuelCost.textContent = `Refuel cost: ${totalCost} CR`;
+            
+            if (overviewRefuelCost) {
+                overviewRefuelCost.textContent = this.gameState.currentSystem.hasRefuel ? 
+                    `Refuel cost: ${totalCost} CR` : 
+                    'Refuel not available';
+            }
             
             // Calculate cargo value
             const cargoSpace = this.gameState.cargo.reduce((sum, item) => sum + item.quantity, 0);
             let cargoValue = 0;
-            this.gameState.cargo.forEach(item => {
-                const marketItem = this.gameState.currentSystem.market[item.id];
-                cargoValue += marketItem.sellPrice * item.quantity;
-            });
+            
+            // Only calculate value if system has a market
+            if (this.gameState.currentSystem.hasMarket) {
+                this.gameState.cargo.forEach(item => {
+                    const marketItem = this.gameState.currentSystem.market?.[item.id];
+                    if (marketItem) {
+                        cargoValue += marketItem.sellPrice * item.quantity;
+                    }
+                });
+            }
+            
             if (overviewCargo) overviewCargo.textContent = `${cargoSpace}/${this.gameState.cargoCapacity} units`;
-            if (overviewCargoValue) overviewCargoValue.textContent = `Value: ${cargoValue.toLocaleString()} CR`;
+            if (overviewCargoValue) {
+                overviewCargoValue.textContent = this.gameState.currentSystem.hasMarket ? 
+                    `Value: ${cargoValue.toLocaleString()} CR` : 
+                    'Market not available';
+            }
             
             // Calculate threat level
             let threatLevel = "Low";
@@ -446,7 +543,7 @@ updateUI() {
                 const nearby = this.gameState.galaxy.filter(system => {
                     if (system === this.gameState.currentSystem) return false;
                     const distance = this.gameState.calculateDistance(this.gameState.currentSystem, system);
-                    return distance <= 50;
+                    return distance <= 50 && system.discovered;
                 });
                 
                 // Sort by distance
@@ -471,7 +568,7 @@ updateUI() {
                 });
                 
                 if (nearby.length === 0) {
-                    nearbySystems.innerHTML = '<div style="text-align: center; padding: 10px; color: #8888ff;">No nearby systems</div>';
+                    nearbySystems.innerHTML = '<div style="text-align: center; padding: 10px; color: #8888ff;">No discovered systems nearby</div>';
                 }
             }
         }
@@ -539,21 +636,43 @@ updateUI() {
         const screenX = (system.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
         const screenY = (system.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
         
-        panel.innerHTML = `
-            <h3>${system.name}</h3>
-            <div class="stat">
-                <span>Economy:</span>
-                <span class="stat-value">${system.economy.charAt(0).toUpperCase() + system.economy.slice(1)}</span>
-            </div>
-            <div class="stat">
-                <span>Tech Level:</span>
-                <span class="stat-value">${system.techLevel.charAt(0).toUpperCase() + system.techLevel.slice(1)}</span>
-            </div>
-            <div class="stat">
-                <span>Security:</span>
-                <span class="stat-value">${system.security.charAt(0).toUpperCase() + system.security.slice(1)}</span>
-            </div>
-        `;
+        if (!system.discovered) {
+            // Show limited info for undiscovered systems
+            panel.innerHTML = `
+                <h3>Unknown System</h3>
+                <div class="stat">
+                    <span>Status:</span>
+                    <span class="stat-value">Undiscovered</span>
+                </div>
+            `;
+        } else {
+            // Show full info for discovered systems
+            const services = [];
+            if (system.hasShipyard) services.push('Shipyard');
+            if (system.hasRefuel) services.push('Refuel');
+            if (system.hasMarket) services.push('Market');
+            if (system.hasSpecial) services.push('Special');
+            
+            panel.innerHTML = `
+                <h3>${system.name}</h3>
+                <div class="stat">
+                    <span>Economy:</span>
+                    <span class="stat-value">${system.economy.charAt(0).toUpperCase() + system.economy.slice(1)}</span>
+                </div>
+                <div class="stat">
+                    <span>Tech Level:</span>
+                    <span class="stat-value">${system.techLevel.charAt(0).toUpperCase() + system.techLevel.slice(1)}</span>
+                </div>
+                <div class="stat">
+                    <span>Security:</span>
+                    <span class="stat-value">${system.security.charAt(0).toUpperCase() + system.security.slice(1)}</span>
+                </div>
+                <div class="stat">
+                    <span>Services:</span>
+                    <span class="stat-value">${services.join(', ') || 'None'}</span>
+                </div>
+            `;
+        }
         
         // Position the panel relative to the system dot on screen
         panel.style.left = `${screenX + 10}px`;
@@ -580,7 +699,7 @@ updateUI() {
                     if (system && system !== this.gameState.currentSystem) {
                         this.gameState.targetSystem = system;
                         this.updateUI();
-                        this.showNotification(`Target: ${system.name}`);
+                        this.showNotification(`Target: ${system.discovered ? system.name : 'Unknown System'}`);
                     }
                 }
             });
@@ -636,11 +755,6 @@ updateUI() {
 
             this.showNotification(result.message);
             
-            // Add the 'traveling' class to the ship indicator to activate the CSS effect
-            //if (this.shipIndicatorEl) {
-            //    this.shipIndicatorEl.classList.add('traveling');
-            //}
-            
             // Animate travel
             const startTime = Date.now();
             const travelDuration = 2000 * this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem)  ; // 2sec * distance
@@ -672,14 +786,15 @@ updateUI() {
                         btn.disabled = false;
                     });
                     document.querySelector('.ui-panel').classList.remove('traveling');
-
-                    // Remove the 'traveling' class to stop the effect
-                    //if (this.shipIndicatorEl) {
-                    //    this.shipIndicatorEl.classList.remove('traveling');
-                    //}
                     
                     const result = this.gameState.completeTravel();
                     this.showNotification(result.message);
+                    
+                        // Add this after travel animation completes
+                    if (!gameState.currentSystem.discovered) {
+                    gameState.currentSystem.discovered = true;
+                    this.updateGalaxyView();   
+                    }
                     
                     // Determine encounter chance based on security
                     let pirateChance = 0.4;
@@ -702,6 +817,12 @@ updateUI() {
         // Refuel button
         const refuelBtn = document.getElementById('refuel-btn');
         if (refuelBtn) refuelBtn.addEventListener('click', () => {
+            // Only allow refuel if system has refuel capability
+            if (!this.gameState.currentSystem.hasRefuel) {
+                this.showNotification("Refuel services not available!");
+                return;
+            }
+            
             const result = this.gameState.refuelShip();
             if (result.success) {
                 this.showNotification(result.message);

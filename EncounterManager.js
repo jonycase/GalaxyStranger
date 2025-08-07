@@ -14,20 +14,53 @@ export class EncounterManager {
     }
     
     getRandomEncounter() {
+        const security = this.gameState.currentSystem.security;
+        let pirateWeight = 30;
+        let policeWeight = 10;
+        
+        // Adjust weights based on security level
+        switch(security) {
+            case 'high':
+                pirateWeight = 5;
+                policeWeight = 30;
+                break;
+            case 'medium':
+                pirateWeight = 20;
+                policeWeight = 20;
+                break;
+            case 'low':
+                pirateWeight = 30;
+                policeWeight = 10;
+                break;
+            case 'none':
+                pirateWeight = 40;
+                policeWeight = 0;
+                break;
+        }
+        
+        const encounters = [
+            { type: 'pirate', name: 'Pirate Attack', weight: pirateWeight },
+            { type: 'police', name: 'Police Inspection', weight: policeWeight },
+            { type: 'trader', name: 'Wandering Trader', weight: 15 },
+            { type: 'debris', name: 'Space Debris Field', weight: 15 },
+            { type: 'distress', name: 'Distress Signal', weight: 10 },
+            { type: 'anomaly', name: 'Spatial Anomaly', weight: 10 }
+        ];
+        
         let totalWeight = 0;
-        this.gameState.encounters.forEach(encounter => {
+        encounters.forEach(encounter => {
             totalWeight += encounter.weight;
         });
         
         let random = Math.random() * totalWeight;
-        for (const encounter of this.gameState.encounters) {
+        for (const encounter of encounters) {
             if (random < encounter.weight) {
                 return encounter;
             }
             random -= encounter.weight;
         }
         
-        return this.gameState.encounters[0];
+        return encounters[0];
     }
     
     startEncounter(encounterType) {
@@ -41,7 +74,7 @@ export class EncounterManager {
         switch(encounterType) {
             case 'pirate':
                 // Determine pirate tier based on system tech level
-                const techLevels = ['low', 'medium', 'high'];
+                const techLevels = ['none', 'low', 'medium', 'high'];
                 const tier = Math.min(techLevels.indexOf(this.gameState.currentSystem.techLevel) + 1 + Math.floor(Math.random() * 3), 10);
                 
                 // Create pirate ship
@@ -66,7 +99,13 @@ export class EncounterManager {
                 break;
                 
             case 'police':
-                this.currentEncounter = new PoliceEncounter(this.gameState.ship, this.gameState);
+                this.currentEncounter = new PoliceEncounter(
+                    this.gameState.ship, 
+                    this.gameState, 
+                    {
+                        encounterManager: this
+                    }
+                );
                 break;
                 
             case 'trader':

@@ -292,6 +292,15 @@
                     window.location.reload();
                 });
             });
+                    // Set all systems as undiscovered at start
+        gameState.galaxy.forEach(system => {
+            system.discovered = false;
+        });
+        
+        // Mark starting system as discovered
+        if (gameState.currentSystem) {
+            gameState.currentSystem.discovered = true;
+        }
         });
     </script>
 </body>
