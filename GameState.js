@@ -1,4 +1,10 @@
-import { EconomyProfiles, CustomSystems, getWeightedRandom, generateSystemName } from './SystemGen.js';
+import { 
+    EconomyProfiles, 
+    CustomSystems, 
+    getWeightedRandom, 
+    generateSystemName,
+    generatePosition
+} from './SystemGen.js';
 
 export class GameState {
     constructor() {
@@ -170,61 +176,79 @@ export class GameState {
     
     generateGalaxy() {
         this.galaxy = [];
-        const names = new Set();
+        const names = new Set(CustomSystems.map(sys => sys.name));
         const nameCount = this.galaxySize + CustomSystems.length;
         
+        // Generate unique names
         while (names.size < nameCount) {
             const name = generateSystemName();
             names.add(name);
         }
         
         const nameArray = Array.from(names);
-        const points = this.generateSystemPositions();
+        const points = [];
+        const minDist = this.minDistance;
         
-        // Create custom systems first
+        // Create custom systems
         CustomSystems.forEach((customSystem, index) => {
+            const position = generatePosition(
+                this.galaxyWidth, 
+                this.galaxyHeight, 
+                minDist, 
+                points
+            );
+        
             const system = {
                 ...customSystem,
                 id: index,
-                name: nameArray[index],
-                x: customSystem.x,
-                y: customSystem.y,
+                name: customSystem.name,
+                x: position.x,
+                y: position.y,
                 market: {},
                 lastRestock: 0,
                 daysSinceRestock: 0
             };
             this.generateMarket(system);
+            points.push({ x: system.x, y: system.y });
             this.galaxy.push(system);
         });
         
         // Create regular systems
-        for (let i = CustomSystems.length; i < points.length && i < this.galaxySize; i++) {
-            const point = points[i];
+        for (let i = CustomSystems.length; i < this.galaxySize; i++) {
+            const position = generatePosition(
+                this.galaxyWidth, 
+                this.galaxyHeight, 
+                minDist, 
+                points
+            );
+            
             const economy = this.selectWeightedEconomy();
             const profile = EconomyProfiles[economy];
-        
+            
             const system = {
                 id: i,
                 name: nameArray[i],
-                x: point.x,
-                y: point.y,
+                x: position.x,
+                y: position.y,
                 economy: economy,
                 techLevel: getWeightedRandom(this.techLevels, profile.techLevelWeights),
                 security: getWeightedRandom(this.securityLevels, profile.securityLevelWeights),
                 hasShipyard: Math.random() < profile.hasShipyardChance,
                 hasRefuel: profile.hasRefuel,
                 hasMarket: profile.hasMarket,
-                hasSpecial: Math.random() < profile.hasSpecialChance,
+                hasSpecial: Math.random() < 0.2,
                 market: {},
                 lastRestock: 0,
                 daysSinceRestock: 0
-            };
-            
+            };            
+        
             if (system.hasMarket) {
                 this.generateMarket(system);
             }
             
+            points.push({ x: system.x, y: system.y });
             this.galaxy.push(system);
+            
             this.updateLoadingProgress(
                 Math.round((i + 1) / this.galaxySize * 100),
                 `Creating system: ${system.name}`
@@ -233,101 +257,31 @@ export class GameState {
         
         this.setStartingSystem();
     }
-    
-    generateSystemPositions() {
-        const points = [];
-        const active = [];
-        const width = this.galaxyWidth;
-        const height = this.galaxyHeight;
-        const minDist = this.minDistance;
-        const maxAttempts = 30;
-        
-        // First point (center of galaxy)
-        const firstPoint = {
-            x: width/2 + (Math.random() - 0.5) * width * 0.2,
-            y: height/2 + (Math.random() - 0.5) * height * 0.2
-        };
-        points.push(firstPoint);
-        active.push(0);
-        
-        // Generate points using Poisson disk sampling
-        while (active.length > 0 && points.length < this.galaxySize + CustomSystems.length) {
-            const randIndex = Math.floor(Math.random() * active.length);
-            const point = points[active[randIndex]];
-            let found = false;
-            
-            for (let i = 0; i < maxAttempts; i++) {
-                const angle = Math.random() * Math.PI * 2;
-                const distance = minDist + Math.random() * minDist;
-                const newPoint = {
-                    x: point.x + Math.cos(angle) * distance,
-                    y: point.y + Math.sin(angle) * distance
-                };
-                
-                // Check boundaries
-                if (newPoint.x < 100 || newPoint.x > width - 100 ||
-                    newPoint.y < 100 || newPoint.y > height - 100) {
-                    continue;
-                }
-                
-                // Check distance to other points
-                let valid = true;
-                for (const p of points) {
-                    const dx = p.x - newPoint.x;
-                    const dy = p.y - newPoint.y;
-                    if (Math.sqrt(dx*dx + dy*dy) < minDist) {
-                        valid = false;
-                        break;
-                    }
-                }
-                
-                if (valid) {
-                    points.push(newPoint);
-                    active.push(points.length - 1);
-                    found = true;
-                    break;
-                }
-            }
-            
-            if (!found) {
-                active.splice(randIndex, 1);
-            }
-            
-            // Update loading
-            const percent = Math.round(points.length / (this.galaxySize + CustomSystems.length) * 100);
-            this.updateLoadingProgress(percent, `Positioning systems: ${points.length}/${this.galaxySize}`);
-        }
-        
-        return points;
-    }
-    
-    selectWeightedEconomy() {
-        const economies = Object.keys(EconomyProfiles).filter(e => e !== 'custom');
-        const weights = economies.map(e => EconomyProfiles[e].weight);
-        return getWeightedRandom(economies, weights);
-    }
     generateMarket(system) {
-        // Handle custom system market overrides
+        // Handle custom system market
         if (system.economy === 'custom' && system.marketOverrides) {
             Object.entries(system.marketOverrides).forEach(([goodId, data]) => {
-                system.market[goodId] = {
-                    name: this.goods.find(g => g.id === goodId).name,
-                    buyPrice: data.buyPrice,
-                    sellPrice: data.sellPrice,
-                    quantity: data.quantity,
-                    maxQuantity: data.quantity
-                };
+                const good = this.goods.find(g => g.id === goodId);
+                if (good) {
+                    system.market[goodId] = {
+                        name: good.name,
+                        buyPrice: data.buyPrice,
+                        sellPrice: data.sellPrice,
+                        illegal: good.illegal,
+                        quantity: data.quantity,
+                        maxQuantity: data.quantity
+                    };
+                }
             });
             return;
         }
         
         const profile = EconomyProfiles[system.economy];
+        if (!profile.hasMarket) return;
         
         this.goods.forEach(good => {
             // Skip illegal goods in high-security systems
-            if (good.illegal && system.security === 'high') {
-                return;
-            }
+            if (good.illegal && system.security === 'high') return;
             
             // Apply economy-specific modifiers
             let baseModifier = 1;
@@ -379,6 +333,12 @@ export class GameState {
                 maxQuantity: maxQuantity
             };
         });
+    }
+
+    selectWeightedEconomy() {
+        const economies = Object.keys(EconomyProfiles).filter(e => e !== 'custom');
+        const weights = economies.map(e => EconomyProfiles[e].weight);
+        return getWeightedRandom(economies, weights);
     }
     
     setStartingSystem() {

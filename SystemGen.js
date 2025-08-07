@@ -1,9 +1,8 @@
-// SystemGen.js - Centralized system generation profiles
-
+// SystemGen.js
 export const EconomyProfiles = {
     agricultural: {
         weight: 10,
-        techLevelWeights: [0, 4, 5, 1],  // [none, low, medium, high]
+        techLevelWeights: [0, 4, 5, 1],
         securityLevelWeights: [0, 5, 4, 1],
         hasShipyardChance: 0.3,
         hasRefuel: true,
@@ -82,7 +81,7 @@ export const EconomyProfiles = {
         securityLevelWeights: [0, 1, 3, 6],
         hasShipyardChance: 0.9,
         hasRefuel: true,
-        hasMarket: false,
+        hasMarket: true,
         marketModifiers: {
             weapons: { baseModifier: 0.6, quantityMultiplier: 1.6 },
             robotics: { baseModifier: 0.7, quantityMultiplier: 1.4 },
@@ -101,7 +100,7 @@ export const EconomyProfiles = {
         description: "Uninhabited systems with no established infrastructure"
     },
     custom: {
-        weight: 0, // Only created explicitly
+        weight: 0,
         fixedProperties: true,
         description: "Unique systems with special properties"
     }
@@ -121,12 +120,13 @@ export const CustomSystems = [
         hasSpecial: true,
         marketOverrides: {
             food: { buyPrice: 8, sellPrice: 6, quantity: 120 },
-            medicine: { buyPrice: 45, sellPrice: 35, quantity: 90 }
+            medicine: { buyPrice: 45, sellPrice: 35, quantity: 90 },
+            tech: { buyPrice: 70, sellPrice: 55, quantity: 110 }
         }
     },
     {
         name: "Neo Titan",
-        economy: "tech",
+        economy: "custom",
         x: 650,
         y: 400,
         techLevel: "medium",
@@ -136,13 +136,16 @@ export const CustomSystems = [
         hasMarket: true,
         hasSpecial: false,
         marketOverrides: {
-            ore: { buyPrice: 1, sellPrice: 999, quantity: 999 },
-            robotics: { buyPrice: 1, sellPrice: 9999, quantity: 500 }
+            ore: { buyPrice: 1, sellPrice: 999, quantity: 9999 },
+            robotics: { buyPrice: 1, sellPrice: 9999, quantity: 9999 },
+            fuel: { buyPrice: 1, sellPrice: 500, quantity: 9999 }
         }
     }
 ];
 
 export const getWeightedRandom = (items, weights) => {
+    if (!weights || weights.length === 0) return items[0];
+    
     const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
     let random = Math.random() * totalWeight;
     
@@ -175,4 +178,35 @@ export const generateSystemName = () => {
     }
     return `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${
             nameParts[Math.floor(Math.random() * nameParts.length)]}`;
+};
+
+export const generatePosition = (width, height, minDist, existingPoints) => {
+    let attempts = 0;
+    let newPoint;
+    
+    while (attempts < 100) {
+        newPoint = {
+            x: 100 + Math.random() * (width - 200),
+            y: 100 + Math.random() * (height - 200)
+        };
+        
+        let valid = true;
+        for (const point of existingPoints) {
+            const dx = point.x - newPoint.x;
+            const dy = point.y - newPoint.y;
+            if (Math.sqrt(dx*dx + dy*dy) < minDist) {
+                valid = false;
+                break;
+            }
+        }
+        
+        if (valid) return newPoint;
+        attempts++;
+    }
+    
+    // Fallback if no valid position found
+    return {
+        x: 100 + Math.random() * (width - 200),
+        y: 100 + Math.random() * (height - 200)
+    };
 };
