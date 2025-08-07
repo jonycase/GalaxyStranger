@@ -66,13 +66,13 @@ export class GameState {
         this.securityLevels = ['none', 'low', 'medium', 'high'];
         
         this.upgrades = [
-            { id: 'hull', name: 'Reinforced Hull', description: 'Increases hull strength', cost: 2000, effect: 10, icon: 'fas fa-shield-alt' },
-            { id: 'weapons', name: 'Plasma Cannons', description: 'Increases weapon damage', cost: 3000, effect: 5, icon: 'fas fa-gem' },
+            { id: 'hull', name: 'Reinforced Hull', description: 'Increases hull strength', cost: 5000, effect: 10, icon: 'fas fa-shield-alt' },
+            { id: 'weapons', name: 'Plasma Cannons', description: 'Increases weapon damage', cost: 3500, effect: 5, icon: 'fas fa-gem' },
             { id: 'engine', name: 'Quantum Engine', description: 'Increases evasion chance', cost: 2500, effect: 5, icon: 'fas fa-tachometer-alt' },
             { id: 'shields', name: 'Deflector Shields', description: 'Increases shield strength', cost: 3500, effect: 10, icon: 'fas fa-atom' },
-            { id: 'cargo', name: 'Expanded Cargo', description: 'Increases cargo capacity', cost: 1500, effect: 10, icon: 'fas fa-boxes' },
-            { id: 'fuel', name: 'Fuel Tanks', description: 'Increases fuel capacity', cost: 1800, effect: 5, icon: 'fas fa-gas-pump' },
-            { id: 'radar', name: 'Long-Range Radar', description: 'Allows scanning nearby systems', cost: 4000, effect: 15, icon: 'fas fa-satellite' }
+            { id: 'cargo', name: 'Expanded Cargo', description: 'Increases cargo capacity', cost: 2500, effect: 10, icon: 'fas fa-boxes' },
+            { id: 'fuel', name: 'Fuel Tanks', description: 'Increases fuel capacity', cost: 2500, effect: 5, icon: 'fas fa-gas-pump' },
+            { id: 'radar', name: 'Long-Range Radar', description: 'Allows scanning nearby systems', cost: 5000, effect: 15, icon: 'fas fa-satellite' }
         ];
         
         this.loan = {
@@ -104,11 +104,11 @@ export class GameState {
     
     initGame(size, callback) {
         // Reset state
-        this.credits = 10000;
-        this.fuel = 15;
-        this.maxFuel = 15;
+        this.credits = 3000;
+        this.fuel = 5;
+        this.maxFuel = 5;
         this.cargo = [];
-        this.cargoCapacity = 50;
+        this.cargoCapacity = 40;
         this.ship = {
             x: 0,
             y: 0,
