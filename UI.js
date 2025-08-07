@@ -94,6 +94,7 @@ export class UI {
             // Set color based on economy
             let color;
             switch (system.economy) {
+                case 'unpopulated': color = '#bf683f'; break;
                 case 'agricultural': color = '#66cc66'; break;
                 case 'industrial': color = '#cc6666'; break;
                 case 'tech': color = '#6666cc'; break;
@@ -205,7 +206,7 @@ export class UI {
     }
 
     // UI Update
-    updateUI() {
+updateUI() {
         // Update stats
         const creditsEl = document.getElementById('credits');
         const fuelEl = document.getElementById('fuel');
@@ -248,6 +249,10 @@ export class UI {
             
             this.gameState.goods.forEach(good => {
                 const marketItem = this.gameState.currentSystem.market[good.id];
+                
+                // Add this check to prevent errors if a market item is missing
+                if (!marketItem) return;
+    
                 const marketElement = document.createElement('div');
                 marketElement.className = 'market-item';
                 
@@ -284,6 +289,10 @@ export class UI {
             } else {
                 this.gameState.cargo.forEach(item => {
                     const marketItem = this.gameState.currentSystem.market[item.id];
+                    
+                    // Add this check
+                    if (!marketItem) return;
+    
                     const illegalIndicator = marketItem.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
                     
                     const cargoItem = document.createElement('div');
@@ -628,13 +637,13 @@ export class UI {
             this.showNotification(result.message);
             
             // Add the 'traveling' class to the ship indicator to activate the CSS effect
-            if (this.shipIndicatorEl) {
-                this.shipIndicatorEl.classList.add('traveling');
-            }
+            //if (this.shipIndicatorEl) {
+            //    this.shipIndicatorEl.classList.add('traveling');
+            //}
             
             // Animate travel
             const startTime = Date.now();
-            const travelDuration = 3000; // 3 seconds
+            const travelDuration = 2000 * this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem)  ; // 2sec * distance
             
             const animateTravel = () => {
                 const elapsed = Date.now() - startTime;
@@ -665,9 +674,9 @@ export class UI {
                     document.querySelector('.ui-panel').classList.remove('traveling');
 
                     // Remove the 'traveling' class to stop the effect
-                    if (this.shipIndicatorEl) {
-                        this.shipIndicatorEl.classList.remove('traveling');
-                    }
+                    //if (this.shipIndicatorEl) {
+                    //    this.shipIndicatorEl.classList.remove('traveling');
+                    //}
                     
                     const result = this.gameState.completeTravel();
                     this.showNotification(result.message);
@@ -814,7 +823,7 @@ export class UI {
                 const dy = e.touches[0].clientY - e.touches[1].clientY;
                 this.lastTouchDistance = Math.sqrt(dx * dx + dy * dy);
             }
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
         });
         
         galaxyCanvas.addEventListener('touchmove', (e) => {
@@ -835,7 +844,7 @@ export class UI {
                 this.lastTouchDistance = distance;
                 this.updateGalaxyView();
             }
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault(); // fix from google to preventDefault 
         });
         
         galaxyCanvas.addEventListener('touchend', () => {

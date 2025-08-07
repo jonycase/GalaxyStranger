@@ -19,11 +19,6 @@ body {
     overflow: hidden;
 }
 
-@keyframes travel-overlay {
-    from { opacity: 0.3; }
-    to { opacity: 0.6; }
-}
-
 /* Add to styles.css */
 .galaxy-shape-selector {
     display: flex;
@@ -164,41 +159,6 @@ h1 {
     color: #66ccff;
     text-shadow: 0 0 5px rgba(100, 180, 255, 0.7);
     transition: all 0.3s ease;
-}
-
-/* New travel effect using a pseudo-element on the ship indicator */
-.ship-indicator::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 5px;
-    height: 5px;
-    background: white;
-    border-radius: 50%;
-    box-shadow: 0 0 10px white, 0 0 20px #66ffff, 0 0 30px #66ccff;
-    transform: translate(-50%, -50%) scale(0);
-    transition: transform 0.5s ease-out, opacity 0.5s ease-out;
-    opacity: 0;
-    z-index: -1; /* Place effect behind the ship icon */
-}
-
-/* Activate the effect when the .traveling class is added */
-.ship-indicator.traveling::after {
-    transform: translate(-50%, -50%) scale(2.5);
-    opacity: 1;
-    animation: travel-pulse 1s infinite alternate;
-}
-
-@keyframes travel-pulse {
-    from {
-        transform: translate(-50%, -50%) scale(2.5);
-        opacity: 1;
-    }
-    to {
-        transform: translate(-50%, -50%) scale(3.5);
-        opacity: 0.7;
-    }
 }
 
 .ui-panel {
@@ -411,11 +371,6 @@ h2 i {
     width: max-content;
 }
 
-/* Old travel effect styles are no longer needed */
-.travel-effect, .star-trail {
-    display: none;
-}
-
 /* Unified Encounter Modal Styles */
 .encounter-modal {
     position: fixed;
@@ -550,6 +505,13 @@ h2 i {
     flex: 1;
     padding: 12px;
     font-size: 14px;
+}
+.mobile-btn:hover {
+    flex: 1;
+    padding: 12px;
+    font-size: 14px;
+    border: 1px solid #888;
+    background-color: #ddd;
 }
 
 /* Portrait vs Landscape adjustments */
