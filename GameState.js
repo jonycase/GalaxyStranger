@@ -26,23 +26,29 @@ export class GameState {
             evasion: 15,
             shields: 20,
             engine: 1,
-            rotation: 0
+            rotation: 0,
+            radar: 0
         };
+
         this.currentSystem = null;
         this.targetSystem = null;
         this.galaxy = [];
         this.galaxySize = 200;
+        this.galaxyWidth = 800;
+        this.galaxyHeight = 500;
+        this.galaxyShape = 'balanced';
+        this.minDistance = 30;
+
         this.totalDaysTraveled = 0;
+        this.distanceTraveled = 0;
+        this.systemsVisited = 0;
         this.restockIntervalMin = 7;
         this.restockIntervalMax = 10;
         this.fullRestockIntervalMin = 11;
         this.fullRestockIntervalMax = 14;
-        this.bounty = 0; // Initialize bounty to 0
-        // Add radar level to ship
-        this.ship = {
-            radar: 0 // 0 = no radar
-        };
-        
+        this.bounty = 0;
+        this.contracts = [];
+        this.upgrades = [];
         this.goods = [
             { id: 'food', name: 'Food Rations', basePrice: 10, volatility: 3, production: ['agricultural'], illegal: false },
             { id: 'water', name: 'Water', basePrice: 5, volatility: 2, production: ['agricultural', 'mining'], illegal: false },
@@ -60,7 +66,7 @@ export class GameState {
             { id: 'bio', name: 'Bio-Enhancers', basePrice: 350, volatility: 65, production: ['tech'], illegal: true },
             { id: 'ai', name: 'Sentient AI Cores', basePrice: 800, volatility: 90, production: ['tech'], illegal: true }
         ];
-        
+
         this.economyTypes = Object.keys(EconomyProfiles);
         this.techLevels = ['none', 'low', 'medium', 'high'];
         this.securityLevels = ['none', 'low', 'medium', 'high'];
@@ -81,7 +87,6 @@ export class GameState {
             interest: 0.1
         };
         
-        this.contracts = [];
         this.encounters = [
             { type: 'pirate', name: 'Pirate Attack', weight: 30 },
             { type: 'police', name: 'Police Inspection', weight: 30 },
@@ -94,60 +99,23 @@ export class GameState {
         this.distanceTraveled = 0;
         this.systemsVisited = 1;
         this.gameOver = false;
-        
-        // Galaxy dimensions
-        this.galaxyWidth = 0;
-        this.galaxyHeight = 0;
-        this.minDistance = 0;
-        this.galaxyShape = 'balanced';
     }
-    
+
     initGame(size, callback) {
-        // Reset state
-        this.credits = 3000;
-        this.fuel = 5;
-        this.maxFuel = 5;
-        this.cargo = [];
-        this.cargoCapacity = 40;
-        this.ship = {
-            x: 0,
-            y: 0,
-            targetX: 0,
-            targetY: 0,
-            traveling: false,
-            travelProgress: 0,
-            hull: 100,
-            maxHull: 100,
-            damage: 10,
-            evasion: 15,
-            shields: 20,
-            engine: 1,
-            rotation: 0
-        };
-        this.currentSystem = null;
-        this.targetSystem = null;
-        this.galaxy = [];
         this.galaxySize = size;
-        this.totalDaysTraveled = 0;
-        this.distanceTraveled = 0;
-        this.systemsVisited = 1;
-        this.gameOver = false;
-        this.ship.radar = 0;
-        
-        // Calculate galaxy dimensions
         this.calculateGalaxyDimensions();
-        
         this.showLoadingScreen();
-        setTimeout(() => {
-            this.generateGalaxy();
+
+        setTimeout(async () => {
+            await this.generateGalaxy();
             this.generateContracts();
             this.hideLoadingScreen();
             callback?.();
-        }, 100);
+        }, 80);
     }
-    
+
     calculateGalaxyDimensions() {
-        switch(this.galaxyShape) {
+        switch (this.galaxyShape) {
             case 'wide':
                 this.galaxyWidth = 800 + this.galaxySize;
                 this.galaxyHeight = 400 + this.galaxySize * 0.3;
@@ -160,110 +128,128 @@ export class GameState {
                 this.galaxyWidth = 600 + this.galaxySize;
                 this.galaxyHeight = 500 + this.galaxySize * 0.5;
         }
-        this.minDistance = 30 * Math.sqrt(40 / this.galaxySize);
+        this.minDistance = 30 * Math.sqrt(40 / Math.max(40, this.galaxySize));
     }
-    
+
     showLoadingScreen() {
         const loadingScreen = document.getElementById('loading-screen');
         if (loadingScreen) loadingScreen.style.display = 'flex';
         this.updateLoadingProgress(0, "Initializing galaxy generation");
     }
-    
+
     hideLoadingScreen() {
         const loadingScreen = document.getElementById('loading-screen');
         if (loadingScreen) loadingScreen.style.display = 'none';
     }
-    
+
     updateLoadingProgress(percent, message) {
         const progressBar = document.getElementById('progress-bar');
         const loadingText = document.getElementById('loading-text');
         if (progressBar) progressBar.style.width = percent + '%';
         if (loadingText) loadingText.textContent = message;
     }
-    
-    generateGalaxy() {
+
+    async generateGalaxy() {
         this.galaxy = [];
         const names = new Set(CustomSystems.map(sys => sys.name));
         const nameCount = this.galaxySize + CustomSystems.length;
-        
-        // Generate unique names
+
         while (names.size < nameCount) {
-            const name = generateSystemName();
-            names.add(name);
+            names.add(generateSystemName());
         }
-        
         const nameArray = Array.from(names);
+
         const points = [];
         const minDist = this.minDistance;
-        
-        // Create custom systems
-        CustomSystems.forEach((customSystem, index) => {
-            const position = generatePosition(
-                this.galaxyWidth, 
-                this.galaxyHeight, 
-                minDist, 
-                points
-            );
-        
-            const system = {
-                ...customSystem,
-                id: index,
-                name: customSystem.name,
-                x: position.x,
-                y: position.y,
-                market: {},
-                lastRestock: 0,
-                daysSinceRestock: 0
+
+        CustomSystems.forEach((customSystem, idx) => {
+            const pos = {
+                x: (typeof customSystem.x === 'number') ? customSystem.x : Math.random() * this.galaxyWidth,
+                y: (typeof customSystem.y === 'number') ? customSystem.y : Math.random() * this.galaxyHeight
             };
-            this.generateMarket(system);
-            points.push({ x: system.x, y: system.y });
-            this.galaxy.push(system);
-        });
-        
-        // Create regular systems
-        for (let i = CustomSystems.length; i < this.galaxySize; i++) {
-            const position = generatePosition(
-                this.galaxyWidth, 
-                this.galaxyHeight, 
-                minDist, 
-                points
-            );
-            
-            const economy = this.selectWeightedEconomy();
-            const profile = EconomyProfiles[economy];
-            
-            const system = {
-                id: i,
-                name: nameArray[i],
-                x: position.x,
-                y: position.y,
-                economy: economy,
-                techLevel: getWeightedRandom(this.techLevels, profile.techLevelWeights),
-                security: getWeightedRandom(this.securityLevels, profile.securityLevelWeights),
-                hasShipyard: Math.random() < profile.hasShipyardChance,
-                hasRefuel: profile.hasRefuel,
-                hasMarket: profile.hasMarket,
-                hasSpecial: Math.random() < 0.2,
+            const sys = {
+                ...customSystem,
+                id: idx,
+                name: customSystem.name,
+                x: pos.x,
+                y: pos.y,
                 market: {},
                 lastRestock: 0,
-                daysSinceRestock: 0
-            };            
-        
-            if (system.hasMarket) {
-                this.generateMarket(system);
+                daysSinceRestock: 0,
+                discovered: true
+            };
+            this.generateMarket(sys);
+            points.push({ x: sys.x, y: sys.y });
+            this.galaxy.push(sys);
+        });
+
+        const totalToCreate = Math.max(0, this.galaxySize - CustomSystems.length);
+        const chunkSize = Math.max(20, Math.floor(totalToCreate / 40));
+        let created = 0;
+        let nextId = CustomSystems.length;
+
+        while (created < totalToCreate) {
+            const end = Math.min(created + chunkSize, totalToCreate);
+            for (let c = created; c < end; c++, nextId++) {
+                const position = generatePosition(this.galaxyWidth, this.galaxyHeight, minDist, points);
+                const economy = this.selectWeightedEconomy();
+                const profile = EconomyProfiles[economy] || {};
+
+                const system = {
+                    id: nextId,
+                    name: nameArray[nextId] || `System-${nextId}`,
+                    x: position.x,
+                    y: position.y,
+                    economy: economy,
+                    techLevel: this.pickWeighted(profile.techLevelWeights, ['none', 'low', 'medium', 'high']),
+                    security: this.pickWeighted(profile.securityLevelWeights, ['none', 'low', 'medium', 'high']),
+                    hasShipyard: Math.random() < (profile.hasShipyardChance || 0),
+                    hasRefuel: !!profile.hasRefuel,
+                    hasMarket: !!profile.hasMarket,
+                    hasSpecial: Math.random() < 0.2,
+                    market: {},
+                    lastRestock: 0,
+                    daysSinceRestock: 0,
+                    discovered: false
+                };
+
+                if (system.hasMarket) this.generateMarket(system);
+                points.push({ x: system.x, y: system.y });
+                this.galaxy.push(system);
+
+                // Inside generateGalaxy method
+                if ((nextId - CustomSystems.length) % Math.max(1, Math.floor(chunkSize / 2)) === 0) {
+                    const pct = Math.round((nextId + 1) / this.galaxySize * 100);
+                    this.updateLoadingProgress(pct, `Creating system: ${system.name}`);
+                }
             }
-            
-            points.push({ x: system.x, y: system.y });
-            this.galaxy.push(system);
-            
-            this.updateLoadingProgress(
-                Math.round((i + 1) / this.galaxySize * 100),
-                `Creating system: ${system.name}`
-            );
+
+            created = end;
+            await new Promise(resolve => setTimeout(resolve, 10));
         }
-        
+
         this.setStartingSystem();
+        this.updateLoadingProgress(100, "Galaxy generation complete");
     }
+
+    selectWeightedEconomy() {
+        const keys = Object.keys(EconomyProfiles);
+        const weights = keys.map(k => EconomyProfiles[k].weight || 0);
+        const chosen = getWeightedRandom(keys, weights);
+        return chosen || keys[0];
+    }
+
+    pickWeighted(weights = [], values = []) {
+        if (!weights || weights.length === 0) return values[0] || null;
+        const total = weights.reduce((s, w) => s + w, 0);
+        let r = Math.random() * total;
+        for (let i = 0; i < weights.length; i++) {
+            if (r < weights[i]) return values[i] || values[0];
+            r -= weights[i];
+        }
+        return values[0] || null;
+    }
+
     generateMarket(system) {
         // Handle custom system market
         if (system.economy === 'custom' && system.marketOverrides) {
@@ -284,7 +270,7 @@ export class GameState {
         }
         
         const profile = EconomyProfiles[system.economy];
-        if (!profile.hasMarket) return;
+        if (!profile || !profile.hasMarket) return;
         
         this.goods.forEach(good => {
             // Skip illegal goods in high-security systems
@@ -294,7 +280,7 @@ export class GameState {
             let baseModifier = 1;
             let quantityModifier = 1;
             
-            if (profile.marketModifiers[good.id]) {
+            if (profile.marketModifiers?.[good.id]) {
                 baseModifier = profile.marketModifiers[good.id].baseModifier;
                 quantityModifier = profile.marketModifiers[good.id].quantityMultiplier;
             } else if (good.production.includes(system.economy)) {
@@ -342,254 +328,28 @@ export class GameState {
         });
     }
 
-    selectWeightedEconomy() {
-        const economies = Object.keys(EconomyProfiles).filter(e => e !== 'custom');
-        const weights = economies.map(e => EconomyProfiles[e].weight);
-        return getWeightedRandom(economies, weights);
-    }
-    
     setStartingSystem() {
-        if (this.galaxy.length > 0) {
-            // Find a populated system to start in
-            const populated = this.galaxy.filter(sys => 
-                sys.economy !== 'unpopulated' && sys.economy !== 'custom'
-            );
+        if (this.galaxy.length === 0) return;
+        // Find a populated system to start in
+        const populated = this.galaxy.filter(sys => 
+            sys.economy !== 'unpopulated' && sys.economy !== 'custom'
+        );
+        
+        this.currentSystem = populated.length > 0 
+            ? populated[Math.floor(Math.random() * populated.length)]
+            : this.galaxy[0];
             
-            this.currentSystem = populated.length > 0 
-                ? populated[Math.floor(Math.random() * populated.length)]
-                : this.galaxy[0];
-                
-            this.ship.x = this.currentSystem.x;
-            this.ship.y = this.currentSystem.y;
-        } else {
-            console.error("Failed to generate galaxy - no systems created");
-        }
-    }
-    /**
-     * Generates a set of unique names for the systems.
-     * @returns {Set<string>} A set of unique names.
-     */
-    generateUniqueNames() {
-        const systemNames = [
-            'Sol Prime', 'Proxima', 'Vega', 'Sirius', 'Arcturus', 'Betelgeuse', 'Rigel',
-            'Endorsun', 'Orion', 'Pegasus', 'Cygnus', 'Lyra', 'Draco', 'Centaurus',
-            'Aquila', 'Astrem', 'Orpheus', 'Sanctus', 'Tiberus', 'Nicta', 'Melocor',
-            'Veviron', 'Babylon', 'Torgus', 'Harald', 'Svenus', 'Gion', 'Lectan',
-            'Drouran', 'Zeta Centauri', 'Yota Centauri', 'Tauri', 'Ceti', 'Eridani',
-            'Lacaille', 'Hercules', 'Perseus', 'Tucana', 'Phoenix'
-        ];
-        const prefixes = ['New', 'Old', 'Great', 'Little', 'Upper', 'Lower', 'East', 'West', 'North', 'South', 'Elder', 'Ancestor', 'High'];
-        const suffixes = ['Prime', 'Secundus', 'Tertius', 'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Psy', 'Jeta', 'Nigmus'];
-        const nameParts = ['Vega', 'Sirius', 'Orion', 'Centauri', 'Andromeda', 'Persei', 'Cygni', 'Draconis', 'Lyrae', 'Aquilae', 'Pegasi', 'Tauri'];
-
-        const names = new Set(systemNames);
-        // Add custom system names to the set to ensure they are not duplicated
-        systemProfiles.customSystems.forEach(s => names.add(s.name));
-
-        while (names.size < this.galaxySize) {
-            const pattern = Math.random();
-            let nameCandidate;
-
-            if (pattern < 0.3) {
-                const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-                const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
-                nameCandidate = `${prefix} ${suffix}`;
-            } else if (pattern < 0.6) {
-                const namePart = nameParts[Math.floor(Math.random() * nameParts.length)];
-                const num = Math.floor(1000 + Math.random() * 9000);
-                nameCandidate = `${namePart}-${num}`;
-            } else {
-                const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-                const namePart = nameParts[Math.floor(Math.random() * nameParts.length)];
-                nameCandidate = `${prefix} ${namePart}`;
-            }
-
-            if (!names.has(nameCandidate)) {
-                names.add(nameCandidate);
-            }
-        }
-        return names;
+        this.ship.x = this.currentSystem.x;
+        this.ship.y = this.currentSystem.y;
     }
 
-    /**
-     * Generates system positions using Poisson Disk Sampling.
-     * @returns {Array<object>} An array of {x, y} points.
-     */
-    generateSystemPositions() {
-        let galaxyWidth, galaxyHeight;
-        if (this.galaxyShape === 'wide') {
-            galaxyWidth = 800 + this.galaxySize;
-            galaxyHeight = 400 + this.galaxySize * 0.3;
-        } else if (this.galaxyShape === 'tall') {
-            galaxyWidth = 500 + this.galaxySize;
-            galaxyHeight = 700 + this.galaxySize * 0.7;
-        } else {
-            galaxyWidth = 600 + this.galaxySize;
-            galaxyHeight = 500 + this.galaxySize * 0.5;
-        }
-
-        const points = [];
-        const active = [];
-        const maxAttempts = 30;
-        const firstPoint = {
-            x: galaxyWidth / 2 + (Math.random() - 0.5) * galaxyWidth * 0.2,
-            y: galaxyHeight / 2 + (Math.random() - 0.5) * galaxyHeight * 0.2
-        };
-        points.push(firstPoint);
-        active.push(0);
-
-        while (active.length > 0 && points.length < this.galaxySize) {
-            const randIndex = Math.floor(Math.random() * active.length);
-            const point = points[active[randIndex]];
-            let found = false;
-            for (let i = 0; i < maxAttempts; i++) {
-                const angle = Math.random() * Math.PI * 2;
-                const distance = this.minDistance + Math.random() * this.minDistance;
-                const newPoint = {
-                    x: point.x + Math.cos(angle) * distance,
-                    y: point.y + Math.sin(angle) * distance
-                };
-
-                if (newPoint.x < 100 || newPoint.x > galaxyWidth - 100 || newPoint.y < 100 || newPoint.y > galaxyHeight - 100) {
-                    continue;
-                }
-
-                let valid = true;
-                for (const p of points) {
-                    const dx = p.x - newPoint.x;
-                    const dy = p.y - newPoint.y;
-                    if (Math.sqrt(dx * dx + dy * dy) < this.minDistance) {
-                        valid = false;
-                        break;
-                    }
-                }
-
-                if (valid) {
-                    points.push(newPoint);
-                    active.push(points.length - 1);
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                active.splice(randIndex, 1);
-            }
-        }
-        return points;
-    }
-
-    /**
-     * Placeholder for updating a loading UI.
-     * @param {number} percent - The percentage complete.
-     * @param {string} message - The current status message.
-     */
-    updateLoadingProgress(percent, message) {
-        // This should interact with your game's UI
-        console.log(`Loading: ${percent}% - ${message}`);
-    }
-
-    // Restock system based on days traveled
-    restockSystem(system) {
-        const daysPassed = this.totalDaysTraveled - system.lastRestock;
-        
-        // Calculate partial restock (7-10 days)
-        if (daysPassed >= this.restockIntervalMin && daysPassed < this.fullRestockIntervalMin) {
-            this.goods.forEach(good => {
-                if (system.market[good.id]) {
-                    const maxQuantity = system.market[good.id].maxQuantity;
-                    const currentQuantity = system.market[good.id].quantity;
-                    // Restock to half of max
-                    const targetQuantity = Math.floor(maxQuantity * 0.5);
-                    if (currentQuantity < targetQuantity) {
-                        system.market[good.id].quantity = Math.min(targetQuantity, currentQuantity + 5);
-                    }
-                }
-            });
-            system.lastRestock = this.totalDaysTraveled - (this.fullRestockIntervalMin - daysPassed - 1);
-        } 
-        // Calculate full restock (11-14 days)
-        else if (daysPassed >= this.fullRestockIntervalMin) {
-            this.goods.forEach(good => {
-                if (system.market[good.id]) {
-                    const maxQuantity = system.market[good.id].maxQuantity;
-                    const currentQuantity = system.market[good.id].quantity;
-                    // Restock to full
-                    const targetQuantity = maxQuantity;
-                    if (currentQuantity < targetQuantity) {
-                        system.market[good.id].quantity = Math.min(targetQuantity, currentQuantity + 10);
-                    }
-                }
-            });
-            // Update last restock time
-            system.lastRestock = this.totalDaysTraveled;
-        }
-        
-        system.daysSinceRestock = daysPassed;
-    }
-    
-    // Generate contracts
-    generateContracts() {
-        this.contracts = [];
-        
-        // Only generate contracts if we have systems
-        if (this.galaxy.length === 0) {
-            console.error("Cannot generate contracts - galaxy is empty");
-            return;
-        }
-        
-        // Pirate hunt contracts
-        for (let i = 0; i < 3; i++) {
-            const system = this.galaxy[Math.floor(Math.random() * this.galaxy.length)];
-            const tier = 3 + Math.floor(Math.random() * 8);
-            const reward = 500 + tier * 300;
-            this.contracts.push({
-                id: `hunt-${i}`,
-                type: 'hunt',
-                name: `Pirate Hunt in ${system.name}`,
-                targetSystem: system,
-                tier: tier,
-                reward: reward,
-                completed: false,
-                description: `Eliminate a Tier ${tier} pirate operating in the ${system.name} system.`
-            });
-        }
-        
-        // Delivery contracts
-        for (let i = 0; i < 2; i++) {
-            const origin = this.galaxy[Math.floor(Math.random() * this.galaxy.length)];
-            // Make sure destination is different from origin
-            let destination;
-            do {
-                destination = this.galaxy[Math.floor(Math.random() * this.galaxy.length)];
-            } while (destination === origin && this.galaxy.length > 1);
-            
-            const good = this.goods[Math.floor(Math.random() * this.goods.length)];
-            const quantity = 5 + Math.floor(Math.random() * 10);
-            const reward = good.basePrice * quantity * 1.5;
-            
-            this.contracts.push({
-                id: `delivery-${i}`,
-                type: 'delivery',
-                name: `Deliver ${good.name} to ${destination.name}`,
-                originSystem: origin,
-                targetSystem: destination,
-                good: good.id,
-                quantity: quantity,
-                reward: reward,
-                completed: false,
-                description: `Pick up ${quantity} units of ${good.name} in ${origin.name} and deliver to ${destination.name}.`
-            });
-        }
-    }
-    
-    // Calculate distance between systems (in LY)
     calculateDistance(systemA, systemB) {
+        if (!systemA || !systemB) return 0;
         const dx = systemB.x - systemA.x;
         const dy = systemB.y - systemA.y;
         return Math.sqrt(dx * dx + dy * dy) / 15;
     }
-    
-    // Travel to target system
+
     travelToSystem() {
         if (!this.targetSystem || this.targetSystem === this.currentSystem) {
             return { success: false, message: 'Select a system to travel to!' };
@@ -608,8 +368,8 @@ export class GameState {
         // Update game state for travel
         this.ship.traveling = true;
         this.ship.travelProgress = 0;
-        this.ship.x = this.currentSystem.x; // Set ship's starting X
-        this.ship.y = this.currentSystem.y; // Set ship's starting Y
+        this.ship.x = this.currentSystem.x;
+        this.ship.y = this.currentSystem.y;
         this.ship.targetX = this.targetSystem.x;
         this.ship.targetY = this.targetSystem.y;
         
@@ -649,12 +409,9 @@ export class GameState {
         // Restock current system
         this.restockSystem(this.currentSystem);
         
-        // No need to reset mapOffsetX/Y, camera handles positioning
-        
         return { success: true, message: `Arrived at ${this.currentSystem.name}` };
     }
     
-    // Scan nearby systems
     scanNearbySystems() {
         // Check if player has radar
         if (this.ship.radar === 0) {
@@ -691,7 +448,6 @@ export class GameState {
         };
     }
     
-    // Refuel ship
     refuelShip() {
         if (!this.currentSystem.hasRefuel) {
             return { success: false, message: 'No refueling facilities available!' };
@@ -705,7 +461,7 @@ export class GameState {
         // Default cost per unit if no market exists
         let costPerUnit = 15;
     
-        // Check if the current system has a market and a price for 'fuel'!WARNING FOR POLICE ENC
+        // Check if the current system has a market and a price for 'fuel'
         if (this.currentSystem.hasMarket && this.currentSystem.market['fuel']) {
             costPerUnit = this.currentSystem.market['fuel'].buyPrice;
         } else {
@@ -732,12 +488,12 @@ export class GameState {
         };
     }
     
-    // Handle trade actions (buy/sell)
     tradeItem(goodId, action) {
         if (!this.currentSystem.hasMarket) {
             return { success: false, message: 'No marketplace available!' };
         }
         const marketItem = this.currentSystem.market[goodId];
+        if (!marketItem) return { success: false, message: 'Item not traded here' };
         
         if (action === 'buy') {
             // Check if player has enough credits
@@ -758,7 +514,7 @@ export class GameState {
             
             // Process transaction
             this.credits -= marketItem.buyPrice;
-            marketItem.quantity--; // Reduce stock
+            marketItem.quantity--;
             
             // Add to cargo
             const existingItem = this.cargo.find(item => item.id === goodId);
@@ -806,7 +562,6 @@ export class GameState {
         return { success: false, message: 'Invalid trade action' };
     }
     
-    // Handle ship upgrades
     upgradeShip(upgradeId) {
         const upgrade = this.upgrades.find(u => u.id === upgradeId);
         
@@ -866,7 +621,6 @@ export class GameState {
         return { success: false, message: 'Invalid upgrade' };
     }
     
-    // Handle contract actions
     handleContract(contractId) {
         const contract = this.contracts.find(c => c.id === contractId);
         if (!contract) return { success: false, message: 'Contract not found' };
@@ -939,7 +693,6 @@ export class GameState {
         return { success: false, message: 'Invalid contract action' };
     }
     
-    // Check if game is over
     checkGameOver() {
         if (this.ship.hull <= 0) {
             this.gameOver = true;
@@ -948,10 +701,101 @@ export class GameState {
         return false;
     }
     
-    // Handle damage to ship
     takeDamage(amount) {
         this.ship.hull -= amount;
         this.ship.hull = Math.max(0, this.ship.hull);
         return this.checkGameOver();
+    }
+    
+    restockSystem(system) {
+        const daysPassed = this.totalDaysTraveled - system.lastRestock;
+        
+        // Calculate partial restock (7-10 days)
+        if (daysPassed >= this.restockIntervalMin && daysPassed < this.fullRestockIntervalMin) {
+            this.goods.forEach(good => {
+                if (system.market[good.id]) {
+                    const maxQuantity = system.market[good.id].maxQuantity;
+                    const currentQuantity = system.market[good.id].quantity;
+                    // Restock to half of max
+                    const targetQuantity = Math.floor(maxQuantity * 0.5);
+                    if (currentQuantity < targetQuantity) {
+                        system.market[good.id].quantity = Math.min(targetQuantity, currentQuantity + 5);
+                    }
+                }
+            });
+            system.lastRestock = this.totalDaysTraveled - (this.fullRestockIntervalMin - daysPassed - 1);
+        } 
+        // Calculate full restock (11-14 days)
+        else if (daysPassed >= this.fullRestockIntervalMin) {
+            this.goods.forEach(good => {
+                if (system.market[good.id]) {
+                    const maxQuantity = system.market[good.id].maxQuantity;
+                    const currentQuantity = system.market[good.id].quantity;
+                    // Restock to full
+                    const targetQuantity = maxQuantity;
+                    if (currentQuantity < targetQuantity) {
+                        system.market[good.id].quantity = Math.min(targetQuantity, currentQuantity + 10);
+                    }
+                }
+            });
+            // Update last restock time
+            system.lastRestock = this.totalDaysTraveled;
+        }
+        
+        system.daysSinceRestock = daysPassed;
+    }
+    
+    generateContracts() {
+        this.contracts = [];
+        
+        // Only generate contracts if we have systems
+        if (this.galaxy.length === 0) {
+            console.error("Cannot generate contracts - galaxy is empty");
+            return;
+        }
+        
+        // Pirate hunt contracts
+        for (let i = 0; i < 3; i++) {
+            const system = this.galaxy[Math.floor(Math.random() * this.galaxy.length)];
+            const tier = 3 + Math.floor(Math.random() * 8);
+            const reward = 500 + tier * 300;
+            this.contracts.push({
+                id: `hunt-${i}`,
+                type: 'hunt',
+                name: `Pirate Hunt in ${system.name}`,
+                targetSystem: system,
+                tier: tier,
+                reward: reward,
+                completed: false,
+                description: `Eliminate a Tier ${tier} pirate operating in the ${system.name} system.`
+            });
+        }
+        
+        // Delivery contracts
+        for (let i = 0; i < 2; i++) {
+            const origin = this.galaxy[Math.floor(Math.random() * this.galaxy.length)];
+            // Make sure destination is different from origin
+            let destination;
+            do {
+                destination = this.galaxy[Math.floor(Math.random() * this.galaxy.length)];
+            } while (destination === origin && this.galaxy.length > 1);
+            
+            const good = this.goods[Math.floor(Math.random() * this.goods.length)];
+            const quantity = 5 + Math.floor(Math.random() * 10);
+            const reward = good.basePrice * quantity * 1.5;
+            
+            this.contracts.push({
+                id: `delivery-${i}`,
+                type: 'delivery',
+                name: `Deliver ${good.name} to ${destination.name}`,
+                originSystem: origin,
+                targetSystem: destination,
+                good: good.id,
+                quantity: quantity,
+                reward: reward,
+                completed: false,
+                description: `Pick up ${quantity} units of ${good.name} in ${origin.name} and deliver to ${destination.name}.`
+            });
+        }
     }
 }

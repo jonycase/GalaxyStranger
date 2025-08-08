@@ -62,7 +62,7 @@
             <h2>CREATE YOUR GALAXY</h2>
             <p>Select the size of your trading galaxy:</p>
             <div class="galaxy-size-selector">
-                <div class="size-option" data-size="40">
+                <div class="size-option" data-size="50">
                     <h3><i class="fas fa-star"></i> SMALL GALAXY</h3>
                     <p>40 Star Systems</p>
                     <p>Perfect for beginners</p>
@@ -72,9 +72,9 @@
                     <p>300 Star Systems</p>
                     <p>Balanced challenge</p>
                 </div>
-                <div class="size-option" data-size="800">
+                <div class="size-option" data-size="1200">
                     <h3><i class="fas fa-galaxy"></i> VAST GALAXY</h3>
-                    <p>800 Star Systems</p>
+                    <p>3200 Star Systems</p>
                     <p>For experienced traders</p>
                 </div>
             </div>
@@ -266,8 +266,7 @@
                             gameState.galaxyShape = shape; 
                             gameState.initGame(size, () => {
                                 ui.setupCanvas();
-                                ui.setupEventListeners();
-                                ui.updateUI();
+                                ui.updateUI(); // Add this to initialize UI
                                 ui.showNotification(`Welcome to ${gameState.currentSystem.name}!`);
                             });
                         }, 300);

@@ -1,235 +1,303 @@
-// Helper function for easing the travel animation
+// UI.js
 function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
-
-// Add this at the top of the file
+// Global flag for travel state
 let isTraveling = false;
 
 export class UI {
     constructor(gameState, encounterManager) {
         this.gameState = gameState;
         this.encounterManager = encounterManager;
-        // Add a property to hold the ship indicator element for efficient access
-        this.shipIndicatorEl = null;
 
-        // Camera properties for panning and zooming
+        // Camera properties
         this.camera = {
             x: 0,
             y: 0,
             zoom: 6,
-            minZoom: 3,
+            minZoom: 2,
             maxZoom: 10
         };
-        this.isDragging = false;
-        this.lastTouchDistance = 0;
-        this.galaxyCanvas = null; // Will be set in setupCanvas
 
-        // Add this at the top of the UI class constructor
+        // Pools & active sets
+        this.systemPool = [];
+        this.namePool = [];
+        this.activeSystems = new Map();
+        this.systemMap = new Map();
+
+        // DOM refs
+        this.galaxyCanvas = null;
+        this.systemContainer = null;
+        this.shipContainer = null;
+        this.shipIndicatorEl = null;
+
+        // Internal update scheduling
+        this.pendingUpdate = false;
+        this.cameraControlsInitialized = false;
+
+        // Bindings
+        this._onAnimationFrame = this._onAnimationFrame.bind(this);
+
+        // Block clicks while traveling
         document.addEventListener('click', (e) => {
             if (isTraveling && e.target.closest('button')) {
                 this.showNotification("Cannot interact while traveling!");
                 e.preventDefault();
             }
         }, true);
+        
+        // Setup app event listeners
+        this.setupAppEventListeners();
     }
-    
-    // Canvas setup and rendering with camera support
+
     setupCanvas() {
         this.galaxyCanvas = document.getElementById('galaxy-canvas');
-        const systemContainer = document.getElementById('system-container');
-        const shipContainer = document.getElementById('ship-container');
-        if (!this.galaxyCanvas || !systemContainer || !shipContainer) return;
-        
+        this.systemContainer = document.getElementById('system-container');
+        this.shipContainer = document.getElementById('ship-container');
+
+        if (!this.galaxyCanvas || !this.systemContainer || !this.shipContainer) return;
+
+        // Make canvas match container
         this.galaxyCanvas.width = this.galaxyCanvas.offsetWidth;
         this.galaxyCanvas.height = this.galaxyCanvas.offsetHeight;
-        
-        const galaxyCtx = this.galaxyCanvas.getContext('2d');
-        
-        // Draw galaxy background
-        galaxyCtx.fillStyle = '#000033';
-        galaxyCtx.fillRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
-        
-        // Draw stars
-        galaxyCtx.fillStyle = '#ffffff';
-        for (let i = 0; i < 800; i++) {
-            const x = Math.random() * this.galaxyCanvas.width;
-            const y = Math.random() * this.galaxyCanvas.height;
-            const size = Math.random() * 2;
-            galaxyCtx.beginPath();
-            galaxyCtx.arc(x, y, size, 0, Math.PI * 2);
-            galaxyCtx.fill();
-        }
-        
-        // Draw nebulae
-        const nebulaeColors = ['#330066', '#660033', '#006633', '#663300'];
-        for (let i = 0; i < 4; i++) {
-            const x = Math.random() * this.galaxyCanvas.width;
-            const y = Math.random() * this.galaxyCanvas.height;
-            const radius = 50 + Math.random() * 80;
-            const color = nebulaeColors[Math.floor(Math.random() * nebulaeColors.length)];
-            const gradient = galaxyCtx.createRadialGradient(x, y, 0, x, y, radius);
-            gradient.addColorStop(0, color);
-            gradient.addColorStop(1, 'transparent');
-            galaxyCtx.fillStyle = gradient;
-            galaxyCtx.beginPath();
-            galaxyCtx.arc(x, y, radius, 0, Math.PI * 2);
-            galaxyCtx.fill();
-        }
-        
-        // Draw star systems as DOM elements with camera transformation
-        systemContainer.innerHTML = '';
-        this.gameState.galaxy.forEach(system => {
-            const screenX = (system.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
-            const screenY = (system.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
-            
-            const systemDot = document.createElement('div');
-            systemDot.className = 'system-dot';
-            systemDot.dataset.id = system.id;
-            systemDot.style.left = `${screenX - 6}px`;
-            systemDot.style.top = `${screenY - 6}px`;
-            
-            // Set color based on discovery state
-            let color;
-            if (system.discovered) {
-                // Use economy-based color for discovered systems
-                switch (system.economy) {
-                    case 'unpopulated': color = '#bf683f'; break;
-                    case 'agricultural': color = '#66cc66'; break;
-                    case 'industrial': color = '#cc6666'; break;
-                    case 'tech': color = '#6666cc'; break;
-                    case 'mining': color = '#cccc66'; break;
-                    case 'trade': color = '#cc66cc'; break;
-                    case 'military': color = '#cc6666'; break;
-                    default: color = '#aaaaaa';
-                }
-            } else {
-                // Grey for undiscovered systems
-                color = '#666666';
-            }
-            systemDot.style.backgroundColor = color;
-            
-            // Add name label - only show name if discovered
-            const systemName = document.createElement('div');
-            systemName.className = 'system-name';
-            systemName.textContent = system.discovered ? system.name : '???';
-            systemName.style.left = `${screenX + 10}px`;
-            systemName.style.top = `${screenY - 25}px`;
-            
-            systemContainer.appendChild(systemDot);
-            systemContainer.appendChild(systemName);
-            
-            // Highlight current system
-            if (system === this.gameState.currentSystem) {
-                systemDot.classList.add('selected-system');
-            }
-        });
-        
-        // Create the ship indicator element once and store it
-        shipContainer.innerHTML = ''; // Clear container first
+
+        // Cache systems in a Map for O(1) lookup later
+        this.systemMap.clear();
+        this.gameState.galaxy.forEach(sys => this.systemMap.set(sys.id, sys));
+
+        // Pre-create a small pool to avoid creating nodes constantly
+        this._createPool(Math.min(120, Math.max(40, Math.floor(this.gameState.galaxySize / 10))));
+
+        // Create ship indicator (single element only)
+        this.shipContainer.innerHTML = '';
         const shipIndicator = document.createElement('div');
         shipIndicator.className = 'ship-indicator';
         shipIndicator.innerHTML = '<i class="fas fa-space-shuttle"></i>';
         this.shipIndicatorEl = shipIndicator;
-        shipContainer.appendChild(this.shipIndicatorEl);
+        this.shipContainer.appendChild(this.shipIndicatorEl);
 
         // Center camera on ship initially
         this.centerCameraOnShip();
+
+        // Setup input listeners
+        this.setupInput();
+
+        // Resize observer to resize canvas and schedule update
+        window.addEventListener('resize', () => {
+            if (!this.galaxyCanvas) return;
+            this.galaxyCanvas.width = this.galaxyCanvas.offsetWidth;
+            this.galaxyCanvas.height = this.galaxyCanvas.offsetHeight;
+            this.drawBackground(); // Redraw stars on resize
+            this.scheduleUpdate();
+        });
+
+        // Start the RAF loop
+        requestAnimationFrame(this._onAnimationFrame);
     }
-    
-    // Center camera on the ship's current position
+
+    // Create initial DOM pool
+    _createPool(size) {
+        for (let i = 0; i < size; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'system-dot';
+            dot.style.pointerEvents = 'auto';
+
+            const name = document.createElement('div');
+            name.className = 'system-name';
+            name.style.pointerEvents = 'none';
+
+            // Pools keep nodes detached until needed
+            this.systemPool.push(dot);
+            this.namePool.push(name);
+        }
+    }
+
+    // Acquire DOM pair from pool (creating more if needed)
+    _acquireElements() {
+        if (this.systemPool.length === 0) this._createPool(20);
+        const dot = this.systemPool.pop();
+        const name = this.namePool.pop();
+        return { dot, name };
+    }
+
+    // Release DOM pair back to pool
+    _releaseElements(pair) {
+        if (!pair) return;
+        try {
+            // Only remove if attached to DOM
+            if (pair.dot && pair.dot.parentNode) pair.dot.remove();
+            if (pair.name && pair.name.parentNode) pair.name.remove();
+        } catch (e) { /* ignore */ }
+
+        if (pair.dot) this.systemPool.push(pair.dot);
+        if (pair.name) this.namePool.push(pair.name);
+    }
+
+    // Convert screen bounds -> world bounds (returns margin-extended box)
+    _getVisibleWorldRect(margin = 80) {
+        const w = this.galaxyCanvas.width;
+        const h = this.galaxyCanvas.height;
+        const halfW = w / 2 / this.camera.zoom;
+        const halfH = h / 2 / this.camera.zoom;
+        return {
+            left: this.camera.x - halfW - margin / this.camera.zoom,
+            right: this.camera.x + halfW + margin / this.camera.zoom,
+            top: this.camera.y - halfH - margin / this.camera.zoom,
+            bottom: this.camera.y + halfH + margin / this.camera.zoom
+        };
+    }
+
+    // Schedule an update on next rAF (debounced)
+    scheduleUpdate() {
+        if (this.pendingUpdate) return;
+        this.pendingUpdate = true;
+        requestAnimationFrame(() => {
+            this.pendingUpdate = false;
+            this._updateView();
+        });
+    }
+
+    // main rAF tick (handle animations like ship travel)
+    _onAnimationFrame() {
+        this.updateShipPosition();
+        requestAnimationFrame(this._onAnimationFrame);
+    }
+
+    // Draw static galaxy background (stars/nebulae) — do it once or rarely
+    drawBackground() {
+        if (!this.galaxyCanvas) return;
+        const ctx = this.galaxyCanvas.getContext('2d');
+        ctx.clearRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
+        ctx.fillStyle = '#000033';
+        ctx.fillRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
+
+        // cheap starfield (few hundred)
+        ctx.fillStyle = '#ffffff';
+        const starCount = Math.min(900, Math.floor((this.galaxyCanvas.width * this.galaxyCanvas.height) / 2000));
+        for (let i = 0; i < starCount; i++) {
+            const x = Math.random() * this.galaxyCanvas.width;
+            const y = Math.random() * this.galaxyCanvas.height;
+            const size = Math.random() * 1.8;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // Rebuild active set based on camera viewport
+    _updateView() {
+        if (!this.systemContainer || !this.galaxyCanvas) return;
+
+        const rect = this._getVisibleWorldRect(120); // margin so things pop in a little early
+        const activeSet = this.activeSystems;
+        const sysMap = this.systemMap;
+
+        // Quick pass: mark active systems that go out of view
+        for (const [id, elements] of activeSet.entries()) {
+            const sys = sysMap.get(id);
+            if (!sys) {
+                this._releaseElements(elements);
+                activeSet.delete(id);
+                continue;
+            }
+            if (sys.x < rect.left || sys.x > rect.right || sys.y < rect.top || sys.y > rect.bottom) {
+                // out of view: recycle
+                this._releaseElements(elements);
+                activeSet.delete(id);
+            }
+        }
+
+        // Add visible systems that are not active yet
+        for (let i = 0, len = this.gameState.galaxy.length; i < len; i++) {
+            const sys = this.gameState.galaxy[i];
+            if (sys.x >= rect.left && sys.x <= rect.right && sys.y >= rect.top && sys.y <= rect.bottom) {
+                if (!activeSet.has(sys.id)) {
+                    const { dot, name } = this._acquireElements();
+                    dot.dataset.id = sys.id;
+                    // set color based on discovery (fast switch)
+                    dot.style.backgroundColor = sys.discovered ? this._getEconomyColor(sys.economy) : '#666666';
+                    name.textContent = sys.discovered ? sys.name : '???';
+                    // Append to DOM
+                    this.systemContainer.appendChild(dot);
+                    this.systemContainer.appendChild(name);
+                    activeSet.set(sys.id, { dotEl: dot, nameEl: name });
+                }
+            }
+        }
+
+        // Update positions + visuals for active elements
+        for (const [id, elements] of activeSet.entries()) {
+            const sys = sysMap.get(id);
+            if (!sys) continue;
+            const screenX = (sys.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
+            const screenY = (sys.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
+
+            const dotEl = elements.dotEl;
+            const nameEl = elements.nameEl;
+
+            dotEl.style.left = `${Math.round(screenX - 6)}px`;
+            dotEl.style.top = `${Math.round(screenY - 6)}px`;
+
+            nameEl.style.left = `${Math.round(screenX + 10)}px`;
+            nameEl.style.top = `${Math.round(screenY - 25)}px`;
+            nameEl.textContent = sys.discovered ? sys.name : '???';
+
+            // color adjustments if changed (avoid re-writing same value)
+            const desiredColor = sys.discovered ? this._getEconomyColor(sys.economy) : '#666666';
+            if (dotEl.style.backgroundColor !== desiredColor) {
+                dotEl.style.backgroundColor = desiredColor;
+            }
+
+            dotEl.classList.toggle('selected-system', sys === this.gameState.currentSystem);
+            dotEl.style.boxShadow = (sys === this.gameState.targetSystem) ? '0 0 10px #ffcc66, 0 0 20px #ffcc66' : '0 0 10px currentColor';
+        }
+
+        // Finally update ship position
+        this.updateShipPosition();
+    }
+
+    _getEconomyColor(economy) {
+        switch (economy) {
+            case 'unpopulated': return '#bf683f';
+            case 'agricultural': return '#66cc66';
+            case 'industrial': return '#cc6666';
+            case 'tech': return '#6666cc';
+            case 'mining': return '#cccc66';
+            case 'trade': return '#cc66cc';
+            case 'military': return '#cc6666';
+            default: return '#aaaaaa';
+        }
+    }
+
     centerCameraOnShip() {
         this.camera.x = this.gameState.ship.x;
         this.camera.y = this.gameState.ship.y;
         this.camera.zoom = 3.0;
-        this.updateGalaxyView();
+        this.scheduleUpdate();
     }
 
-    // Move the camera by a given delta
     moveCamera(dx, dy) {
         this.camera.x += dx / this.camera.zoom;
         this.camera.y += dy / this.camera.zoom;
+        this.scheduleUpdate();
     }
 
-    // Set the zoom level of the camera
     setZoom(zoom) {
         this.camera.zoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, zoom));
+        this.scheduleUpdate();
     }
 
-    // Update ship position with camera transformation
     updateShipPosition() {
         if (!this.shipIndicatorEl || !this.gameState.currentSystem || !this.galaxyCanvas) return;
-        
         const screenX = (this.gameState.ship.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
         const screenY = (this.gameState.ship.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
-        
-        this.shipIndicatorEl.style.left = `${screenX - 12}px`;
-        this.shipIndicatorEl.style.top = `${screenY - 12}px`;
+        this.shipIndicatorEl.style.left = `${Math.round(screenX - 12)}px`;
+        this.shipIndicatorEl.style.top = `${Math.round(screenY - 12)}px`;
         this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
     }
 
-    // Update galaxy view with camera transformations
-    updateGalaxyView() {
-        const systemContainer = document.getElementById('system-container');
-        if (!systemContainer || !this.galaxyCanvas) return;
-        
-        // Update all systems' positions and names based on current camera
-        systemContainer.querySelectorAll('.system-dot').forEach(dot => {
-            const systemId = parseInt(dot.dataset.id);
-            const system = this.gameState.galaxy.find(s => s.id === systemId);
-            
-            if (system) {
-                const screenX = (system.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
-                const screenY = (system.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
-                
-                dot.style.left = `${screenX - 6}px`;
-                dot.style.top = `${screenY - 6}px`;
-                
-                // Update system name position
-                const systemNameEl = dot.nextElementSibling; // Assuming system name is right after dot
-                if (systemNameEl && systemNameEl.classList.contains('system-name')) {
-                    systemNameEl.style.left = `${screenX + 10}px`;
-                    systemNameEl.style.top = `${screenY - 25}px`;
-                    systemNameEl.textContent = system.discovered ? system.name : '???';
-                }
-
-                // Update system color based on discovery state
-                let color;
-                if (system.discovered) {
-                    switch (system.economy) {
-                        case 'unpopulated': color = '#bf683f'; break;
-                        case 'agricultural': color = '#66cc66'; break;
-                        case 'industrial': color = '#cc6666'; break;
-                        case 'tech': color = '#6666cc'; break;
-                        case 'mining': color = '#cccc66'; break;
-                        case 'trade': color = '#cc66cc'; break;
-                        case 'military': color = '#cc6666'; break;
-                        default: color = '#aaaaaa';
-                    }
-                } else {
-                    color = '#666666';
-                }
-                dot.style.backgroundColor = color;
-
-                dot.classList.remove('selected-system');
-                if (system === this.gameState.currentSystem) {
-                    dot.classList.add('selected-system');
-                }
-                
-                if (system === this.gameState.targetSystem) {
-                    dot.style.boxShadow = '0 0 10px #ffcc66, 0 0 20px #ffcc66';
-                } else {
-                    dot.style.boxShadow = '0 0 10px currentColor';
-                }
-            }
-        });
-        
-        this.updateShipPosition();
-    }
-
-    // UI Update
+    // UI update (stats, market, etc.)
     updateUI() {
-        // Update stats
         const creditsEl = document.getElementById('credits');
         const fuelEl = document.getElementById('fuel');
         const hullEl = document.getElementById('hull');
@@ -406,7 +474,7 @@ export class UI {
                     }
                     if (result.success) {
                         this.showNotification(result.message);
-                        this.updateGalaxyView();
+                        this.scheduleUpdate();
                         this.updateUI();
                     } else {
                         this.showNotification(result.message);
@@ -451,7 +519,7 @@ export class UI {
         });
         
         // Update galaxy view
-        this.updateGalaxyView();
+        this.scheduleUpdate();
     }
 
     // Update system overview panel
@@ -686,58 +754,225 @@ export class UI {
         if (panel) panel.style.opacity = '0';
     }
 
-    // Setup event listeners
-    setupEventListeners() {
-        // System selection
-        const systemContainer = document.getElementById('system-container');
-        if (systemContainer) {
-            // System selection
-            systemContainer.addEventListener('click', (e) => {
-                if (e.target.classList.contains('system-dot')) {
-                    const systemId = parseInt(e.target.dataset.id);
-                    const system = this.gameState.galaxy.find(s => s.id === systemId);
-                    if (system && system !== this.gameState.currentSystem) {
-                        this.gameState.targetSystem = system;
-                        this.updateUI();
-                        this.showNotification(`Target: ${system.discovered ? system.name : 'Unknown System'}`);
-                    }
-                }
-            });
+    // Setup input handlers
+    setupInput() {
+        let isDragging = false;
+        let last = { x: 0, y: 0 };
+
+        const map = document.querySelector('.map-container');
+        if (!map) return;
+
+        map.addEventListener('pointerdown', (e) => {
+            isDragging = true;
+            last.x = e.clientX;
+            last.y = e.clientY;
+            map.setPointerCapture?.(e.pointerId);
+        });
+
+        map.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - last.x;
+            const dy = e.clientY - last.y;
+            last.x = e.clientX;
+            last.y = e.clientY;
+            // Move camera inversely to drag
+            this.moveCamera(-dx, -dy);
+        });
+
+        map.addEventListener('pointerup', (e) => {
+            isDragging = false;
+            map.releasePointerCapture?.(e.pointerId);
+        });
+
+        map.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY;
+            const zoomFactor = Math.exp(-delta * 0.0012);
+            this.setZoom(this.camera.zoom * zoomFactor);
+        }, { passive: false });
+
+        // Click selection: use event delegation on systemContainer
+        this.systemContainer.addEventListener('click', (e) => {
+            if (isTraveling) return; // Block selection during travel
             
-            // System hover info
-            systemContainer.addEventListener('mousemove', (e) => {
-                if (e.target.classList.contains('system-dot')) {
-                    const systemId = parseInt(e.target.dataset.id);
-                    const system = this.gameState.galaxy.find(s => s.id === systemId);
-                    if (system) {
-                        this.showSystemInfo(system, e.clientX, e.clientY);
-                    }
-                }
-            });
-            
-            systemContainer.addEventListener('mouseleave', () => this.hideSystemInfo());
-            
-            // Touch support for mobile
-            systemContainer.addEventListener('touchmove', (e) => {
-                const touch = e.touches[0];
-                const element = document.elementFromPoint(touch.clientX, touch.clientY);
-                if (element && element.classList.contains('system-dot')) {
-                    const systemId = parseInt(element.dataset.id);
-                    const system = this.gameState.galaxy.find(s => s.id === systemId);
-                    if (system) {
-                        this.showSystemInfo(system, touch.clientX, touch.clientY);
-                    }
-                }
-            });
-            
-            systemContainer.addEventListener('touchend', () => this.hideSystemInfo());
-        }
+            const target = e.target.closest('.system-dot');
+            if (!target) return;
+            const systemId = parseInt(target.dataset.id, 10);
+            const system = this.systemMap.get(systemId);
+            if (system && system !== this.gameState.currentSystem) {
+                this.gameState.targetSystem = system;
+                this.updateUI();
+                this.showNotification(`Target: ${system.discovered ? system.name : 'Unknown System'}`);
+                this.scheduleUpdate();
+            }
+        });
+
+        // Hover: show system info on pointermove
+        this.systemContainer.addEventListener('pointermove', (e) => {
+            const target = e.target.closest('.system-dot');
+            if (!target) {
+                this.hideSystemInfo();
+                return;
+            }
+            const systemId = parseInt(target.dataset.id, 10);
+            const system = this.systemMap.get(systemId);
+            if (system) {
+                this.showSystemInfo(system, e.clientX, e.clientY);
+            }
+        });
+
+        this.systemContainer.addEventListener('pointerleave', () => this.hideSystemInfo());
+    }
+
+    setupCameraControls() {
+        const galaxyCanvas = this.galaxyCanvas;
+        if (!galaxyCanvas || this.cameraControlsInitialized) return;
+        this.cameraControlsInitialized = true;
+
+        let isDragging = false;
+        let lastX = 0;
+        let lastY = 0;
+        let lastTouchDistance = 0;
         
-        // MODIFIED: Travel button logic completely overhauled
+        // Mouse drag to pan
+        galaxyCanvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+            galaxyCanvas.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+        
+        galaxyCanvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const dx = (e.clientX - lastX);
+                const dy = (e.clientY - lastY);
+                this.moveCamera(-dx, -dy);
+                lastX = e.clientX;
+                lastY = e.clientY;
+                this.scheduleUpdate();
+            }
+        });
+        
+        const handleMouseUp = () => {
+            isDragging = false;
+            galaxyCanvas.style.cursor = 'grab';
+        };
+        
+        galaxyCanvas.addEventListener('mouseup', handleMouseUp);
+        galaxyCanvas.addEventListener('mouseleave', handleMouseUp);
+        
+        // Mouse wheel zoom
+        galaxyCanvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomAmount = e.deltaY > 0 ? -0.1 : 0.1;
+            const newZoom = this.camera.zoom + zoomAmount;
+            
+            // Smooth zoom animation
+            const startZoom = this.camera.zoom;
+            const targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, newZoom));
+            const startTime = Date.now();
+            const duration = 600;
+            
+            const animateZoom = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration * 50 , 1);
+                const easedProgress = easeInOutCubic(progress);
+                
+                this.camera.zoom = startZoom + (targetZoom - startZoom) * easedProgress;
+                this.scheduleUpdate();
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animateZoom);
+                }
+            };
+            
+            animateZoom();
+        });
+        
+        // Touch controls for pan and pinch-to-zoom
+        galaxyCanvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                lastX = e.touches[0].clientX;
+                lastY = e.touches[0].clientY;
+            } else if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                lastTouchDistance = Math.sqrt(dx * dx + dy * dy);
+            }
+            if (e.cancelable) e.preventDefault();
+        });
+        
+        galaxyCanvas.addEventListener('touchmove', (e) => {
+            if (isDragging && e.touches.length === 1) {
+                const dx = (e.touches[0].clientX - lastX);
+                const dy = (e.touches[0].clientY - lastY);
+                this.moveCamera(-dx, -dy);
+                lastX = e.touches[0].clientX;
+                lastY = e.touches[0].clientY;
+                this.scheduleUpdate();
+            } else if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const zoomChange = (distance - lastTouchDistance) * 0.01;
+                
+                this.setZoom(this.camera.zoom + zoomChange);
+                lastTouchDistance = distance;
+                this.scheduleUpdate();
+            }
+            if (e.cancelable) e.preventDefault();
+        });
+        
+        galaxyCanvas.addEventListener('touchend', () => {
+            isDragging = false;
+            lastTouchDistance = 0;
+        });
+        
+        // Center button
+        const centerBtn = document.createElement('div');
+        centerBtn.className = 'map-center-btn';
+        centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
+        centerBtn.addEventListener('click', () => {
+            // Smooth camera centering
+            const startX = this.camera.x;
+            const startY = this.camera.y;
+            const startZoom = this.camera.zoom;
+            const startTime = Date.now();
+            const duration = 500;
+            
+            const animateCenter = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easedProgress = easeInOutCubic(progress);
+                
+                this.camera.x = startX + (this.gameState.ship.x - startX) * easedProgress;
+                this.camera.y = startY + (this.gameState.ship.y - startY) * easedProgress;
+                this.scheduleUpdate();
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animateCenter);
+                }
+            };
+            
+            animateCenter();
+        });
+        
+        document.querySelector('.map-container').appendChild(centerBtn);
+    }
+
+    setupAppEventListeners() {
+        // Travel button
         const travelBtn = document.getElementById('travel-btn');
         if (travelBtn) travelBtn.addEventListener('click', () => {
             if (isTraveling) {
                 this.showNotification("Already traveling!");
+                return;
+            }
+
+            if (!this.gameState.targetSystem) {
+                this.showNotification("Select a system to travel to!");
                 return;
             }
 
@@ -747,7 +982,7 @@ export class UI {
                 return;
             }
             
-            isTraveling = true; // Set travel flag
+            isTraveling = true;
             document.querySelectorAll('button').forEach(btn => {
                 btn.disabled = true;
             });
@@ -755,9 +990,8 @@ export class UI {
 
             this.showNotification(result.message);
             
-            // Animate travel
             const startTime = Date.now();
-            const travelDuration = 2000 * this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem)  ; // 2sec * distance
+            const travelDuration = 2000 * this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
             
             const animateTravel = () => {
                 const elapsed = Date.now() - startTime;
@@ -772,16 +1006,14 @@ export class UI {
                     this.gameState.ship.x = this.gameState.currentSystem.x + (this.gameState.targetSystem.x - this.gameState.currentSystem.x) * easedProgress;
                     this.gameState.ship.y = this.gameState.currentSystem.y + (this.gameState.targetSystem.y - this.gameState.currentSystem.y) * easedProgress;
                     
-                    this.updateShipPosition(); // Update position based on camera
-                    // The rotation is already set in gameState, so we just need to apply it
+                    this.updateShipPosition();
                     this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
                 }
                 
                 if (progress < 1) {
                     requestAnimationFrame(animateTravel);
                 } else {
-                    // Travel complete
-                    isTraveling = false; // Reset travel flag
+                    isTraveling = false;
                     document.querySelectorAll('button').forEach(btn => {
                         btn.disabled = false;
                     });
@@ -790,10 +1022,9 @@ export class UI {
                     const result = this.gameState.completeTravel();
                     this.showNotification(result.message);
                     
-                        // Add this after travel animation completes
-                    if (!gameState.currentSystem.discovered) {
-                    gameState.currentSystem.discovered = true;
-                    this.updateGalaxyView();   
+                    if (!this.gameState.currentSystem.discovered) {
+                        this.gameState.currentSystem.discovered = true;
+                        this.scheduleUpdate();
                     }
                     
                     // Determine encounter chance based on security
@@ -817,7 +1048,6 @@ export class UI {
         // Refuel button
         const refuelBtn = document.getElementById('refuel-btn');
         if (refuelBtn) refuelBtn.addEventListener('click', () => {
-            // Only allow refuel if system has refuel capability
             if (!this.gameState.currentSystem.hasRefuel) {
                 this.showNotification("Refuel services not available!");
                 return;
@@ -846,7 +1076,7 @@ export class UI {
             }
         });
         
-        // Encounter action buttons
+        // Combat buttons
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('combat-btn')) {
                 const action = e.target.dataset.action;
@@ -856,152 +1086,48 @@ export class UI {
             }
         });
         
-        // Tab switching
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                // Update active tab
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                
-                // Show correct tab content
-                document.querySelectorAll('.panel-section').forEach(section => {
-                    section.style.display = 'none';
+        // Tab navigation
+        const tabs = document.querySelectorAll('.tab');
+        if (tabs && tabs.length > 0) {
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    
+                    document.querySelectorAll('.panel-section').forEach(section => {
+                        section.style.display = 'none';
+                    });
+                    
+                    const tabName = tab.dataset.tab;
+                    const activeTab = document.querySelector(`.${tabName}-tab`);
+                    if (activeTab) activeTab.style.display = 'block';
                 });
-                
-                const tabName = tab.dataset.tab;
-                const activeTab = document.querySelector(`.${tabName}-tab`);
-                if (activeTab) activeTab.style.display = 'block';
             });
-        });
+        }
 
         // Setup camera controls
-        this.setupCameraControls();
-    }
+        if (!this.cameraControlsInitialized) {
+            this.setupCameraControls();
+        }
 
-    // Add camera control setup
-    setupCameraControls() {
-        const galaxyCanvas = this.galaxyCanvas;
-        if (!galaxyCanvas) return;
-        
-        // Mouse drag to pan
-        galaxyCanvas.addEventListener('mousedown', (e) => {
-            this.isDragging = true;
-            this.lastX = e.clientX;
-            this.lastY = e.clientY;
-            e.preventDefault();
-        });
-        
-        galaxyCanvas.addEventListener('mousemove', (e) => {
-            if (this.isDragging) {
-                const dx = (e.clientX - this.lastX);
-                const dy = (e.clientY - this.lastY);
-                this.moveCamera(-dx, -dy);
-                this.lastX = e.clientX;
-                this.lastY = e.clientY;
-                this.updateGalaxyView();
-            }
-        });
-        
-        galaxyCanvas.addEventListener('mouseup', () => this.isDragging = false);
-        galaxyCanvas.addEventListener('mouseleave', () => this.isDragging = false);
-        
-        // Mouse wheel zoom
-        galaxyCanvas.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const zoomAmount = e.deltaY > 0 ? -0.1 : 0.1;
-            const newZoom = this.camera.zoom + zoomAmount;
-            
-            // Smooth zoom animation
-            const startZoom = this.camera.zoom;
-            const targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, newZoom));
-            const startTime = Date.now();
-            const duration = 600;
-            
-            const animateZoom = () => {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration * 50 , 1);
-                const easedProgress = easeInOutCubic(progress);
+        // System selection
+        if (this.systemContainer) {
+            this.systemContainer.addEventListener('click', (e) => {
+                if (isTraveling) return; // Block selection during travel
                 
-                this.camera.zoom = startZoom + (targetZoom - startZoom) * easedProgress;
-                this.updateGalaxyView();
+                const target = e.target.closest('.system-dot');
+                if (!target) return;
                 
-                if (progress < 1) {
-                    requestAnimationFrame(animateZoom);
+                const systemId = parseInt(target.dataset.id, 10);
+                const system = this.systemMap.get(systemId);
+                
+                if (system && system !== this.gameState.currentSystem) {
+                    this.gameState.targetSystem = system;
+                    this.updateUI();
+                    this.showNotification(`Target: ${system.discovered ? system.name : 'Unknown System'}`);
+                    this.scheduleUpdate();
                 }
-            };
-            
-            animateZoom();
-        });
-        
-        // Touch controls for pan and pinch-to-zoom
-        galaxyCanvas.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 1) {
-                this.isDragging = true;
-                this.lastX = e.touches[0].clientX;
-                this.lastY = e.touches[0].clientY;
-            } else if (e.touches.length === 2) {
-                const dx = e.touches[0].clientX - e.touches[1].clientX;
-                const dy = e.touches[0].clientY - e.touches[1].clientY;
-                this.lastTouchDistance = Math.sqrt(dx * dx + dy * dy);
-            }
-            if (e.cancelable) e.preventDefault();
-        });
-        
-        galaxyCanvas.addEventListener('touchmove', (e) => {
-            if (this.isDragging && e.touches.length === 1) {
-                const dx = (e.touches[0].clientX - this.lastX);
-                const dy = (e.touches[0].clientY - this.lastY);
-                this.moveCamera(-dx, -dy);
-                this.lastX = e.touches[0].clientX;
-                this.lastY = e.touches[0].clientY;
-                this.updateGalaxyView();
-            } else if (e.touches.length === 2) {
-                const dx = e.touches[0].clientX - e.touches[1].clientX;
-                const dy = e.touches[0].clientY - e.touches[1].clientY;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                const zoomChange = (distance - this.lastTouchDistance) * 0.01;
-                
-                this.setZoom(this.camera.zoom + zoomChange);
-                this.lastTouchDistance = distance;
-                this.updateGalaxyView();
-            }
-            if (e.cancelable) e.preventDefault(); // fix from google to preventDefault 
-        });
-        
-        galaxyCanvas.addEventListener('touchend', () => {
-            this.isDragging = false;
-            this.lastTouchDistance = 0;
-        });
-        
-        // Center button
-        const centerBtn = document.createElement('div');
-        centerBtn.className = 'map-center-btn';
-        centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
-        centerBtn.addEventListener('click', () => {
-            // Smooth camera centering
-            const startX = this.camera.x;
-            const startY = this.camera.y;
-            const startZoom = this.camera.zoom;
-            const startTime = Date.now();
-            const duration = 500;
-            
-            const animateCenter = () => {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const easedProgress = easeInOutCubic(progress);
-                
-                this.camera.x = startX + (this.gameState.ship.x - startX) * easedProgress;
-                this.camera.y = startY + (this.gameState.ship.y - startY) * easedProgress;
-                this.updateGalaxyView();
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateCenter);
-                }
-            };
-            
-            animateCenter();
-        });
-        
-        document.querySelector('.map-container').appendChild(centerBtn);
+            });
+        }
     }
 }
