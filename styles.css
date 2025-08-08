@@ -295,12 +295,16 @@ h2 i {
     background: linear-gradient(to bottom, #3a9a4a, #2a7a3a);
     padding: 5px 8px;
     font-size: 12px;
+    user-select: none;
+    content-visibility: auto;
 }
 
 .btn-sell {
     background: linear-gradient(to bottom, #9a4a3a, #7a3a2a);
     padding: 5px 8px;
     font-size: 12px;
+    user-select: none;
+    content-visibility: auto;
 }
 
 .cargo-item {
@@ -642,6 +646,7 @@ h2 i {
     opacity: 0;
     transition: opacity 0.3s;
     font-size: 12px;
+    content-visibility: auto;
 }
 
 .upgrade-card {

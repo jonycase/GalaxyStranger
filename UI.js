@@ -93,8 +93,14 @@ export class UI {
 
         // Start the RAF loop
         requestAnimationFrame(this._onAnimationFrame);
+        // Ensure there's no leftover DOM from a previous run or bug
+        Array.from(this.systemContainer.querySelectorAll('.system-dot, .system-name'))
+             .forEach(el => el.remove())
+        this.systemPool.length = 0;
+        this.namePool.length = 0;
+        this.activeSystems.clear();
     }
-
+    
     // Create initial DOM pool
     _createPool(size) {
         for (let i = 0; i < size; i++) {
@@ -159,9 +165,7 @@ export class UI {
             dot.style.left = '';
             dot.style.top = '';
             dot.style.boxShadow = '';
-            // remove any inline transforms / selection states
-            dot.removeAttribute('style'); // optional but safe; if you prefer keep some styles, only clear specific properties above
-            // push back
+            dot.style.pointerEvents = 'auto'; // critical for PC selection
             this.systemPool.push(dot);
         }
 
@@ -170,7 +174,6 @@ export class UI {
             name.className = 'system-name';
             name.style.left = '';
             name.style.top = '';
-            name.removeAttribute('style');
             this.namePool.push(name);
         }
     }
