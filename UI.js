@@ -15,8 +15,8 @@ export class UI {
             x: 0,
             y: 0,
             zoom: 6,
-            minZoom: 2,
-            maxZoom: 10
+            minZoom: 1,
+            maxZoom: 15
         };
 
         // Pools & active sets
@@ -117,20 +117,62 @@ export class UI {
         if (this.systemPool.length === 0) this._createPool(20);
         const dot = this.systemPool.pop();
         const name = this.namePool.pop();
+
+        // Defensive clean (in case an element somehow wasn't fully reset)
+        if (dot) {
+            dot.dataset.id = '';
+            dot.className = 'system-dot';
+            // ensure it is detached
+            if (dot.parentNode) dot.parentNode.removeChild(dot);
+            dot.style.pointerEvents = 'auto';
+        }
+        if (name) {
+            name.textContent = '';
+            name.className = 'system-name';
+            if (name.parentNode) name.parentNode.removeChild(name);
+            name.style.pointerEvents = 'none';
+        }
+
         return { dot, name };
     }
 
-    // Release DOM pair back to pool
+    // Release DOM pair back to pool (accepts either {dot,name} or {dotEl,nameEl})
     _releaseElements(pair) {
         if (!pair) return;
-        try {
-            // Only remove if attached to DOM
-            if (pair.dot && pair.dot.parentNode) pair.dot.remove();
-            if (pair.name && pair.name.parentNode) pair.name.remove();
-        } catch (e) { /* ignore */ }
 
-        if (pair.dot) this.systemPool.push(pair.dot);
-        if (pair.name) this.namePool.push(pair.name);
+        // Accept both naming shapes
+        const dot = pair.dot || pair.dotEl || null;
+        const name = pair.name || pair.nameEl || null;
+
+        try {
+            if (dot && dot.parentNode) dot.parentNode.removeChild(dot);
+            if (name && name.parentNode) name.parentNode.removeChild(name);
+        } catch (e) {
+            // ignore DOM removal errors
+        }
+
+        // Clean and return to pool (so reused nodes are neutral)
+        if (dot) {
+            dot.dataset.id = '';
+            dot.className = 'system-dot';
+            dot.style.backgroundColor = '';
+            dot.style.left = '';
+            dot.style.top = '';
+            dot.style.boxShadow = '';
+            // remove any inline transforms / selection states
+            dot.removeAttribute('style'); // optional but safe; if you prefer keep some styles, only clear specific properties above
+            // push back
+            this.systemPool.push(dot);
+        }
+
+        if (name) {
+            name.textContent = '';
+            name.className = 'system-name';
+            name.style.left = '';
+            name.style.top = '';
+            name.removeAttribute('style');
+            this.namePool.push(name);
+        }
     }
 
     // Convert screen bounds -> world bounds (returns margin-extended box)
