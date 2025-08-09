@@ -985,11 +985,13 @@ export class UI {
                 const dx = e.touches[0].clientX - e.touches[1].clientX;
                 const dy = e.touches[0].clientY - e.touches[1].clientY;
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                const zoomChange = (distance - lastTouchDistance) * 0.01;
                 
-                this.setZoom(this.camera.zoom + zoomChange);
+                if (lastTouchDistance > 0) {
+                    const zoomChange = (distance - lastTouchDistance) * 0.01;
+                    // Use setZoom instead of directly modifying camera.zoom
+                    this.setZoom(this.camera.zoom * (1 + zoomChange)); 
+                }
                 lastTouchDistance = distance;
-                this.scheduleUpdate();
             }
             if (e.cancelable) e.preventDefault();
         });

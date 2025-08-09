@@ -8,7 +8,7 @@ import {
 
 export class GameState {
     constructor() {
-        this.credits = 10000;
+        this.credits = 10001;
         this.fuel = 15;
         this.maxFuel = 15;
         this.cargo = [];
