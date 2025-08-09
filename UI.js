@@ -78,6 +78,7 @@ export class UI {
 
         // Center camera on ship initially
         this.centerCameraOnShip();
+        
 
         // Setup input listeners
         this.setupInput();
@@ -94,8 +95,12 @@ export class UI {
         // Start the RAF loop
         requestAnimationFrame(this._onAnimationFrame);
         // Ensure there's no leftover DOM from a previous run or bug
-        Array.from(this.systemContainer.querySelectorAll('.system-dot, .system-name'))
-             .forEach(el => el.remove())
+        Array.from(this.systemContainer.children).forEach(el => {
+            if (el.id == 'map-center-btn') return; // skip deleting button
+            if (el.id == 'centerBtn') return; // skip deleting button
+            if (el.id == 'map-center-btn') return; // skip deleting button
+            el.remove();
+        });
         this.systemPool.length = 0;
         this.namePool.length = 0;
         this.activeSystems.clear();
@@ -806,13 +811,31 @@ export class UI {
 
         const map = document.querySelector('.map-container');
         if (!map) return;
-
-        map.addEventListener('pointerdown', (e) => {
+        
+        let pressTimer = null;
+        this.galaxyCanvas.addEventListener('pointerdown', (e) => {
+            if (e.target.classList.contains('system-dot')) {
+            return;
+            }
+            if (e.target.closest('.system-dot')) {     // my abracadabra
+            return;
+            }
+            
             isDragging = true;
             last.x = e.clientX;
             last.y = e.clientY;
             map.setPointerCapture?.(e.pointerId);
-        });
+            });
+
+        
+        const cancelPressTimer = () => {
+            // If the timer is still running, clear it
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+                isDragging = false;
+            }
+        };
 
         map.addEventListener('pointermove', (e) => {
             if (!isDragging) return;
@@ -842,6 +865,7 @@ export class UI {
             
             const target = e.target.closest('.system-dot');
             if (!target) return;
+            console.log("Сlick", target)
             const systemId = parseInt(target.dataset.id, 10);
             const system = this.systemMap.get(systemId);
             if (system && system !== this.gameState.currentSystem) {

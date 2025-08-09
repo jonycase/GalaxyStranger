@@ -1,0 +1,757 @@
+// UI.js
+
+function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+// Global flag for travel state
+let isTraveling = false;
+
+export class UI {
+    constructor(gameState, encounterManager) {
+        this.gameState = gameState;
+        this.encounterManager = encounterManager;
+
+        // Camera properties
+        this.camera = {
+            x: 0,
+            y: 0,
+            zoom: 6,
+            minZoom: 1,
+            maxZoom: 15
+        };
+
+        // Pools & active sets for DOM element recycling
+        this.systemPool = [];
+        this.namePool = [];
+        this.activeSystems = new Map();
+        this.systemMap = new Map();
+
+        // DOM references
+        this.galaxyCanvas = null;
+        this.systemContainer = null;
+        this.shipContainer = null;
+        this.shipIndicatorEl = null;
+        this.mapContainer = null;
+
+        // Internal update scheduling
+        this.pendingUpdate = false;
+
+        // Bindings
+        this._onAnimationFrame = this._onAnimationFrame.bind(this);
+
+        // Block clicks on UI elements while traveling
+        document.addEventListener('click', (e) => {
+            if (isTraveling && e.target.closest('button')) {
+                this.showNotification("Cannot interact while traveling!");
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true);
+        
+        // Setup non-map related event listeners
+        this.setupAppEventListeners();
+    }
+
+    /**
+     * Sets up the main canvas, containers, and initial view.
+     * This should be called after the DOM is ready.
+     */
+    setupCanvas() {
+        this.mapContainer = document.querySelector('.map-container');
+        this.galaxyCanvas = document.getElementById('galaxy-canvas');
+        this.systemContainer = document.getElementById('system-container');
+        this.shipContainer = document.getElementById('ship-container');
+
+        if (!this.galaxyCanvas || !this.systemContainer || !this.shipContainer || !this.mapContainer) {
+            console.error("One or more required DOM elements are missing.");
+            return;
+        }
+
+        // Make canvas match its container's dimensions
+        this.galaxyCanvas.width = this.mapContainer.offsetWidth;
+        this.galaxyCanvas.height = this.mapContainer.offsetHeight;
+
+        // Cache systems in a Map for O(1) lookup
+        this.systemMap.clear();
+        this.gameState.galaxy.forEach(sys => this.systemMap.set(sys.id, sys));
+
+        // Pre-create a pool of DOM elements to reuse
+        this._createPool(Math.min(120, Math.max(40, Math.floor(this.gameState.galaxySize / 10))));
+
+        // Create the ship indicator element
+        this.shipContainer.innerHTML = '';
+        const shipIndicator = document.createElement('div');
+        shipIndicator.className = 'ship-indicator';
+        shipIndicator.innerHTML = '<i class="fas fa-space-shuttle"></i>';
+        this.shipIndicatorEl = shipIndicator;
+        this.shipContainer.appendChild(this.shipIndicatorEl);
+
+        // Center camera on the ship initially
+        this.centerCameraOnShip();
+
+        // Setup unified input handlers for pan, zoom, and selection
+        this.setupInputHandlers();
+
+        // Redraw the background and update the view on window resize
+        window.addEventListener('resize', () => {
+            if (!this.mapContainer || !this.galaxyCanvas) return;
+            this.galaxyCanvas.width = this.mapContainer.offsetWidth;
+            this.galaxyCanvas.height = this.mapContainer.offsetHeight;
+            this.drawBackground(); // Redraw static stars
+            this.scheduleUpdate(); // Update system positions
+        });
+
+        // Start the animation frame loop
+        requestAnimationFrame(this._onAnimationFrame);
+    }
+    
+    // Create an initial pool of DOM elements to be recycled.
+    _createPool(size) {
+        for (let i = 0; i < size; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'system-dot';
+            const name = document.createElement('div');
+            name.className = 'system-name';
+            this.systemPool.push(dot);
+            this.namePool.push(name);
+        }
+    }
+
+    // Get a dot/name element pair from the pool.
+    _acquireElements() {
+        if (this.systemPool.length === 0) this._createPool(20); // Create more if pool is empty
+        const dot = this.systemPool.pop();
+        const name = this.namePool.pop();
+        return { dot, name };
+    }
+
+    // Return a dot/name element pair to the pool for reuse.
+    _releaseElements(pair) {
+        if (!pair) return;
+        const dot = pair.dot || pair.dotEl;
+        const name = pair.name || pair.nameEl;
+
+        if (dot) {
+            if (dot.parentNode) dot.parentNode.removeChild(dot);
+            dot.dataset.id = '';
+            dot.className = 'system-dot';
+            this.systemPool.push(dot);
+        }
+        if (name) {
+            if (name.parentNode) name.parentNode.removeChild(name);
+            name.textContent = '';
+            this.namePool.push(name);
+        }
+    }
+
+    // Calculate the visible area of the galaxy in world coordinates.
+    _getVisibleWorldRect(margin = 80) {
+        const w = this.galaxyCanvas.width;
+        const h = this.galaxyCanvas.height;
+        const halfW = w / 2 / this.camera.zoom;
+        const halfH = h / 2 / this.camera.zoom;
+        return {
+            left: this.camera.x - halfW - margin / this.camera.zoom,
+            right: this.camera.x + halfW + margin / this.camera.zoom,
+            top: this.camera.y - halfH - margin / this.camera.zoom,
+            bottom: this.camera.y + halfH + margin / this.camera.zoom
+        };
+    }
+
+    // Schedule a single view update on the next animation frame to prevent redundant updates.
+    scheduleUpdate() {
+        if (this.pendingUpdate) return;
+        this.pendingUpdate = true;
+        requestAnimationFrame(() => {
+            this.pendingUpdate = false;
+            this._updateView();
+        });
+    }
+
+    // The main animation loop, primarily for ship travel animation.
+    _onAnimationFrame() {
+        this.updateShipPosition();
+        requestAnimationFrame(this._onAnimationFrame);
+    }
+
+    // Draw the static starfield background.
+    drawBackground() {
+        if (!this.galaxyCanvas) return;
+        const ctx = this.galaxyCanvas.getContext('2d');
+        ctx.clearRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
+        ctx.fillStyle = '#000033';
+        ctx.fillRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
+
+        ctx.fillStyle = '#ffffff';
+        const starCount = Math.min(900, Math.floor((this.galaxyCanvas.width * this.galaxyCanvas.height) / 2000));
+        for (let i = 0; i < starCount; i++) {
+            const x = Math.random() * this.galaxyCanvas.width;
+            const y = Math.random() * this.galaxyCanvas.height;
+            const size = Math.random() * 1.8;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    /**
+     * This is the core rendering function. It determines which systems are visible,
+     * recycles DOM elements for performance, and updates their positions on screen.
+     */
+    _updateView() {
+        if (!this.systemContainer || !this.galaxyCanvas) return;
+
+        const rect = this._getVisibleWorldRect(120);
+        const activeSet = this.activeSystems;
+        const sysMap = this.systemMap;
+
+        // Recycle systems that are no longer in view
+        for (const [id, elements] of activeSet.entries()) {
+            const sys = sysMap.get(id);
+            if (!sys || sys.x < rect.left || sys.x > rect.right || sys.y < rect.top || sys.y > rect.bottom) {
+                this._releaseElements(elements);
+                activeSet.delete(id);
+            }
+        }
+
+        // Activate systems that have entered the view
+        for (const sys of this.gameState.galaxy) {
+            if (sys.x >= rect.left && sys.x <= rect.right && sys.y >= rect.top && sys.y <= rect.bottom) {
+                if (!activeSet.has(sys.id)) {
+                    const { dot, name } = this._acquireElements();
+                    dot.dataset.id = sys.id;
+                    this.systemContainer.appendChild(dot);
+                    this.systemContainer.appendChild(name);
+                    activeSet.set(sys.id, { dotEl: dot, nameEl: name });
+                }
+            }
+        }
+
+        // Update positions and visuals for all active systems
+        for (const [id, { dotEl, nameEl }] of activeSet.entries()) {
+            const sys = sysMap.get(id);
+            if (!sys) continue;
+            
+            const screenX = (sys.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
+            const screenY = (sys.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
+
+            dotEl.style.transform = `translate(${Math.round(screenX - 6)}px, ${Math.round(screenY - 6)}px)`;
+            nameEl.style.transform = `translate(${Math.round(screenX + 10)}px, ${Math.round(screenY - 25)}px)`;
+            
+            nameEl.textContent = sys.discovered ? sys.name : '???';
+            const desiredColor = sys.discovered ? this._getEconomyColor(sys.economy) : '#666666';
+            if (dotEl.style.backgroundColor !== desiredColor) {
+                dotEl.style.backgroundColor = desiredColor;
+            }
+
+            dotEl.classList.toggle('selected-system', sys === this.gameState.currentSystem);
+            dotEl.classList.toggle('target-system', sys === this.gameState.targetSystem);
+        }
+
+        this.updateShipPosition();
+    }
+
+    _getEconomyColor(economy) {
+        const colors = {
+            unpopulated: '#bf683f', agricultural: '#66cc66', industrial: '#cc6666',
+            tech: '#6666cc', mining: '#cccc66', trade: '#cc66cc', military: '#cc6666'
+        };
+        return colors[economy] || '#aaaaaa';
+    }
+
+    centerCameraOnShip() {
+        // Animate the camera centering on the ship
+        const startX = this.camera.x;
+        const startY = this.camera.y;
+        const targetX = this.gameState.ship.x;
+        const targetY = this.gameState.ship.y;
+        const startTime = Date.now();
+        const duration = 500;
+
+        const animateCenter = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const easedProgress = easeInOutCubic(progress);
+
+            this.camera.x = startX + (targetX - startX) * easedProgress;
+            this.camera.y = startY + (targetY - startY) * easedProgress;
+            this.scheduleUpdate();
+
+            if (progress < 1) {
+                requestAnimationFrame(animateCenter);
+            }
+        };
+        animateCenter();
+    }
+
+    moveCamera(dx, dy) {
+        this.camera.x += dx / this.camera.zoom;
+        this.camera.y += dy / this.camera.zoom;
+        this.scheduleUpdate();
+    }
+
+    setZoom(zoom) {
+        this.camera.zoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, zoom));
+        this.scheduleUpdate();
+    }
+
+    updateShipPosition() {
+        if (!this.shipIndicatorEl || !this.galaxyCanvas) return;
+        const screenX = (this.gameState.ship.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
+        const screenY = (this.gameState.ship.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
+        this.shipIndicatorEl.style.transform = `translate(${Math.round(screenX - 12)}px, ${Math.round(screenY - 12)}px) rotate(${this.gameState.ship.rotation}deg)`;
+    }
+
+    // This function sets up all user input on the map itself.
+    setupInputHandlers() {
+        if (!this.mapContainer) return;
+
+        let isPointerDown = false;
+        let hasDragged = false;
+        let lastPos = { x: 0, y: 0 };
+        let lastTouchDist = 0;
+        const activePointers = [];
+
+        // --- Pointer Down: Start of a drag, pan, or tap ---
+        this.mapContainer.addEventListener('pointerdown', e => {
+            isPointerDown = true;
+            hasDragged = false;
+            lastPos = { x: e.clientX, y: e.clientY };
+            
+            activePointers.push(e);
+            this.mapContainer.setPointerCapture(e.pointerId);
+
+            // If two fingers are down, start tracking pinch-zoom distance
+            if (activePointers.length === 2) {
+                const p1 = activePointers[0];
+                const p2 = activePointers[1];
+                lastTouchDist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+            }
+        });
+
+        // --- Pointer Move: Handle panning and zooming ---
+        this.mapContainer.addEventListener('pointermove', e => {
+            if (!isPointerDown) return;
+
+            const pointerIndex = activePointers.findIndex(p => p.pointerId === e.pointerId);
+            if (pointerIndex > -1) activePointers[pointerIndex] = e;
+            
+            const dx = e.clientX - lastPos.x;
+            const dy = e.clientY - lastPos.y;
+
+            if (Math.hypot(dx, dy) > 5) { // Drag threshold
+                hasDragged = true;
+            }
+
+            if (activePointers.length === 1 && hasDragged) { // Single finger/mouse drag for panning
+                this.moveCamera(-dx, -dy);
+            } else if (activePointers.length === 2) { // Two-finger pinch for zooming
+                const p1 = activePointers[0];
+                const p2 = activePointers[1];
+                const newDist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+                if (lastTouchDist > 0) {
+                    const zoomFactor = newDist / lastTouchDist;
+                    this.setZoom(this.camera.zoom * zoomFactor);
+                }
+                lastTouchDist = newDist;
+            }
+            lastPos = { x: e.clientX, y: e.clientY };
+        });
+
+        // --- Pointer Up: End of an action, check for tap ---
+        const onPointerUp = (e) => {
+            const pointerIndex = activePointers.findIndex(p => p.pointerId === e.pointerId);
+            if (pointerIndex > -1) activePointers.splice(pointerIndex, 1);
+
+            if (!hasDragged) { // If it wasn't a drag, it's a tap/click
+                if (isTraveling) return;
+                const target = e.target.closest('.system-dot');
+                if (target) {
+                    const systemId = parseInt(target.dataset.id, 10);
+                    const system = this.systemMap.get(systemId);
+                    if (system && system !== this.gameState.currentSystem) {
+                        this.gameState.targetSystem = system;
+                        this.updateUI();
+                        this.showNotification(`Target: ${system.discovered ? system.name : 'Unknown System'}`);
+                        this.scheduleUpdate();
+                    }
+                }
+            }
+
+            if (activePointers.length < 2) lastTouchDist = 0;
+            if (activePointers.length === 0) isPointerDown = false;
+            
+            this.mapContainer.releasePointerCapture(e.pointerId);
+        };
+        
+        this.mapContainer.addEventListener('pointerup', onPointerUp);
+        this.mapContainer.addEventListener('pointercancel', onPointerUp);
+        this.mapContainer.addEventListener('pointerleave', onPointerUp);
+
+
+        // --- Mouse Wheel for zooming on desktop ---
+        this.mapContainer.addEventListener('wheel', e => {
+            e.preventDefault();
+            const delta = e.deltaY;
+            const zoomFactor = Math.exp(-delta * 0.0012); // Use exponential factor for smoother zoom
+            this.setZoom(this.camera.zoom * zoomFactor);
+        }, { passive: false });
+
+        // --- Hover to show system info ---
+        this.systemContainer.addEventListener('pointermove', (e) => {
+            if (isPointerDown) { // Don't show info while dragging
+                this.hideSystemInfo();
+                return;
+            }
+            const target = e.target.closest('.system-dot');
+            if (!target) {
+                this.hideSystemInfo();
+                return;
+            }
+            const systemId = parseInt(target.dataset.id, 10);
+            const system = this.systemMap.get(systemId);
+            if (system) {
+                this.showSystemInfo(system);
+            }
+        });
+        this.systemContainer.addEventListener('pointerleave', () => this.hideSystemInfo());
+        
+        // --- Center Button ---
+        const centerBtn = document.createElement('div');
+        centerBtn.className = 'map-center-btn';
+        centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
+        // Add some inline styles to ensure it's visible and clickable
+        Object.assign(centerBtn.style, {
+            position: 'absolute',
+            bottom: '20px',
+            right: '20px',
+            width: '50px',
+            height: '50px',
+            backgroundColor: 'rgba(40, 40, 80, 0.7)',
+            color: 'white',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: '1000',
+            border: '1px solid #6688ff'
+        });
+        centerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.centerCameraOnShip();
+        });
+        this.mapContainer.appendChild(centerBtn);
+    }
+    
+    // Show notification
+    showNotification(message) {
+        const notification = document.getElementById('notification');
+        if (!notification) return;
+        
+        notification.textContent = message;
+        notification.classList.add('show');
+        
+        setTimeout(() => {
+            notification.classList.remove('show');
+        }, 3000);
+    }
+
+    // Show system info panel on hover
+    showSystemInfo(system) {
+        const panel = document.getElementById('system-info-panel');
+        if (!panel) return;
+
+        const screenX = (system.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
+        const screenY = (system.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
+        
+        if (!system.discovered) {
+            panel.innerHTML = `<h3>Unknown System</h3>`;
+        } else {
+            const services = [];
+            if (system.hasShipyard) services.push('Shipyard');
+            if (system.hasRefuel) services.push('Refuel');
+            if (system.hasMarket) services.push('Market');
+            
+            panel.innerHTML = `
+                <h3>${system.name}</h3>
+                <div class="stat"><span>Economy:</span> <span class="stat-value">${system.economy}</span></div>
+                <div class="stat"><span>Security:</span> <span class="stat-value">${system.security}</span></div>
+                <div class="stat"><span>Services:</span> <span class="stat-value">${services.join(', ') || 'None'}</span></div>
+            `;
+        }
+        
+        panel.style.transform = `translate(${screenX + 15}px, ${screenY - 15}px)`;
+        panel.style.opacity = '1';
+        panel.style.visibility = 'visible';
+    }
+
+    // Hide system info panel
+    hideSystemInfo() {
+        const panel = document.getElementById('system-info-panel');
+        if (panel) {
+            panel.style.opacity = '0';
+            panel.style.visibility = 'hidden';
+        }
+    }
+
+    // Setup listeners for UI buttons, tabs, etc. (not the map itself)
+    setupAppEventListeners() {
+        // Travel button
+        document.getElementById('travel-btn')?.addEventListener('click', () => {
+            if (isTraveling) {
+                this.showNotification("Already traveling!");
+                return;
+            }
+            if (!this.gameState.targetSystem) {
+                this.showNotification("Select a system to travel to!");
+                return;
+            }
+            const result = this.gameState.travelToSystem();
+            if (!result.success) {
+                this.showNotification(result.message);
+                return;
+            }
+            
+            isTraveling = true;
+            document.querySelector('.ui-panel').classList.add('traveling');
+            this.showNotification(result.message);
+            
+            const startTime = Date.now();
+            const travelDuration = 1000 + 150 * this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
+            
+            const animateTravel = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / travelDuration, 1);
+                const easedProgress = easeInOutCubic(progress);
+                
+                this.gameState.ship.x = this.gameState.currentSystem.x + (this.gameState.targetSystem.x - this.gameState.currentSystem.x) * easedProgress;
+                this.gameState.ship.y = this.gameState.currentSystem.y + (this.gameState.targetSystem.y - this.gameState.currentSystem.y) * easedProgress;
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animateTravel);
+                } else {
+                    isTraveling = false;
+                    document.querySelector('.ui-panel').classList.remove('traveling');
+                    const travelResult = this.gameState.completeTravel();
+                    this.showNotification(travelResult.message);
+                    
+                    if (!this.gameState.currentSystem.discovered) {
+                        this.gameState.currentSystem.discovered = true;
+                    }
+                    
+                    // Random encounter chance
+                    let pirateChance = 0.4;
+                    if (this.gameState.currentSystem.security === 'low') pirateChance = 0.5;
+                    else if (this.gameState.currentSystem.security === 'high') pirateChance = 0.3;
+                    if (Math.random() < pirateChance) {
+                        const encounter = this.encounterManager.getRandomEncounter();
+                        this.encounterManager.startEncounter(encounter.type);
+                    }
+                    
+                    this.updateUI();
+                }
+            };
+            animateTravel();
+        });
+        
+        // Refuel button
+        document.getElementById('refuel-btn')?.addEventListener('click', () => {
+            const result = this.gameState.refuelShip();
+            this.showNotification(result.message);
+            this.updateUI();
+        });
+        
+        // Event delegation for dynamic buttons (market, cargo, contracts, etc.)
+        document.body.addEventListener('click', (e) => {
+            const button = e.target.closest('button');
+            if (!button) return;
+
+            if (button.dataset.good) {
+                const { good, action } = button.dataset;
+                const result = this.gameState.tradeItem(good, action);
+                this.showNotification(result.message);
+                this.updateUI();
+            } else if (button.dataset.upgrade) {
+                const result = this.gameState.upgradeShip(button.dataset.upgrade);
+                this.showNotification(result.message);
+                this.updateUI();
+            } else if (button.dataset.contract) {
+                const result = this.gameState.handleContract(button.dataset.contract);
+                this.showNotification(result.message);
+                this.updateUI();
+            } else if (button.classList.contains('combat-btn')) {
+                this.encounterManager.handleEncounterAction(button.dataset.action);
+            } else if (button.id === 'scan-btn') {
+                 const result = this.gameState.scanNearbySystems();
+                 this.showNotification(result.message);
+                 if (result.success) {
+                     this.scheduleUpdate();
+                     this.updateUI();
+                 }
+            }
+        });
+        
+        // Tab navigation
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                document.querySelectorAll('.panel-section').forEach(section => {
+                    section.style.display = 'none';
+                });
+                
+                const activeTab = document.querySelector(`.${tab.dataset.tab}-tab`);
+                if (activeTab) activeTab.style.display = 'block';
+            });
+        });
+    }
+
+    // This is a large function that updates all the text and buttons in the UI panel.
+    // It's called after any state change (trade, travel, etc.).
+    updateUI() {
+        // Update top-level stats
+        document.getElementById('credits').textContent = `${this.gameState.credits.toLocaleString()} CR`;
+        document.getElementById('fuel').textContent = `${Math.round(this.gameState.fuel)}/${this.gameState.maxFuel}`;
+        document.getElementById('hull').textContent = `${this.gameState.ship.hull}%`;
+        const cargoSpace = this.gameState.cargo.reduce((sum, item) => sum + item.quantity, 0);
+        document.getElementById('cargo-space').textContent = `${cargoSpace}/${this.gameState.cargoCapacity}`;
+
+        // Update target system info
+        if (this.gameState.targetSystem) {
+            document.getElementById('target-system').textContent = this.gameState.targetSystem.discovered ? this.gameState.targetSystem.name : 'Unknown System';
+            const distance = this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
+            document.getElementById('distance').textContent = `${Math.round(distance * 10) / 10} LY`;
+            document.getElementById('fuel-cost').textContent = `${Math.ceil(distance)}`;
+        } else {
+            document.getElementById('target-system').textContent = 'None';
+            document.getElementById('distance').textContent = '0 LY';
+            document.getElementById('fuel-cost').textContent = '0';
+        }
+
+        // Update market, cargo, shipyard, etc.
+        this.updateMarketUI();
+        this.updateCargoUI();
+        this.updateShipyardUI();
+        this.updateSystemOverview();
+        this.updateContractsList();
+        this.updateScanButton();
+
+        // Finally, redraw the galaxy map
+        this.scheduleUpdate();
+    }
+    
+    updateMarketUI() {
+        const marketContainer = document.querySelector('.market-grid');
+        if (!marketContainer || !this.gameState.currentSystem) return;
+
+        if (!this.gameState.currentSystem.hasMarket) {
+            marketContainer.innerHTML = '<div class="no-market-message">Market not available in this system</div>';
+            return;
+        }
+
+        marketContainer.innerHTML = `
+            <div class="market-header">COMMODITY</div><div class="market-header">BUY</div>
+            <div class="market-header">SELL</div><div class="market-header">STOCK</div>
+            <div class="market-header">ACTIONS</div>
+        `;
+        
+        this.gameState.goods.forEach(good => {
+            const marketItem = this.gameState.currentSystem.market[good.id];
+            if (!marketItem) return;
+
+            const marketElement = document.createElement('div');
+            marketElement.className = 'market-item';
+            const illegalIndicator = marketItem.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
+            const stockIndicator = marketItem.quantity > 0 ? `<span style="color: #66ff99;">${marketItem.quantity}</span>` : `<span style="color: #ff6666;">0</span>`;
+            
+            marketElement.innerHTML = `
+                <span>${illegalIndicator}${marketItem.name}</span>
+                <span>${marketItem.buyPrice} CR</span>
+                <span>${marketItem.sellPrice} CR</span>
+                <span>${stockIndicator}</span>
+                <div class="market-actions">
+                    <button class="btn btn-buy" data-good="${good.id}" data-action="buy" ${marketItem.quantity <= 0 ? 'disabled' : ''}>BUY</button>
+                    <button class="btn btn-sell" data-good="${good.id}" data-action="sell">SELL</button>
+                </div>
+            `;
+            marketContainer.appendChild(marketElement);
+        });
+    }
+
+    updateCargoUI() {
+        const cargoContainer = document.getElementById('cargo-hold');
+        if (!cargoContainer) return;
+        cargoContainer.innerHTML = '';
+        
+        if (this.gameState.cargo.length === 0) {
+            cargoContainer.innerHTML = '<div class="cargo-item empty">Cargo hold is empty</div>';
+            return;
+        }
+
+        this.gameState.cargo.forEach(item => {
+            const cargoItem = document.createElement('div');
+            cargoItem.className = 'cargo-item';
+            const illegalIndicator = item.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
+            const marketItem = this.gameState.currentSystem.market?.[item.id];
+            const canSell = this.gameState.currentSystem.hasMarket && marketItem;
+            
+            cargoItem.innerHTML = `
+                <span>${illegalIndicator}${item.name}</span>
+                <span>${item.quantity}</span>
+                <button class="btn btn-sell" data-good="${item.id}" data-action="sell-one" ${canSell ? '' : 'disabled'}>SELL</button>
+            `;
+            cargoContainer.appendChild(cargoItem);
+        });
+    }
+
+    updateShipyardUI() {
+        const shipyardContainer = document.getElementById('ship-upgrades');
+        const shipyardStatusEl = document.getElementById('shipyard-status');
+        if (!shipyardContainer || !shipyardStatusEl) return;
+
+        shipyardContainer.innerHTML = '';
+        if (this.gameState.currentSystem?.hasShipyard) {
+            shipyardStatusEl.textContent = 'Available upgrades:';
+            this.gameState.upgrades.forEach(upgrade => {
+                const upgradeCard = document.createElement('div');
+                upgradeCard.className = 'upgrade-card';
+                upgradeCard.innerHTML = `
+                    <div class="upgrade-header"><i class="${upgrade.icon}"></i><h3>${upgrade.name}</h3></div>
+                    <p>${upgrade.description}</p>
+                    <div class="upgrade-footer">
+                        <span>Cost: ${upgrade.cost} CR</span>
+                        <button class="btn btn-buy" data-upgrade="${upgrade.id}">UPGRADE</button>
+                    </div>
+                `;
+                shipyardContainer.appendChild(upgradeCard);
+            });
+        } else {
+            shipyardStatusEl.textContent = 'Shipyard services not available in this system';
+        }
+    }
+    
+    updateSystemOverview() {
+        // This function can be expanded to show more details about the current system
+    }
+    
+    updateContractsList() {
+        // This function can be expanded to show available contracts
+    }
+
+    updateScanButton() {
+        const statusTab = document.querySelector('.status-tab');
+        if (!statusTab) return;
+        let scanButton = document.getElementById('scan-btn');
+        if (!scanButton) {
+            scanButton = document.createElement('button');
+            scanButton.id = 'scan-btn';
+            scanButton.className = 'btn mobile-btn';
+            scanButton.innerHTML = '<i class="fas fa-satellite-dish"></i> SCAN SYSTEMS';
+            statusTab.appendChild(scanButton);
+        }
+        scanButton.disabled = this.gameState.ship.radar === 0;
+    }
+}

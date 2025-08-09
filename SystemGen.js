@@ -119,9 +119,9 @@ export const CustomSystems = [
         hasMarket: true,
         hasSpecial: true,
         marketOverrides: {
-            food: { buyPrice: 8, sellPrice: 6, quantity: 120 },
-            medicine: { buyPrice: 45, sellPrice: 35, quantity: 90 },
-            tech: { buyPrice: 70, sellPrice: 55, quantity: 110 }
+            food: { buyPrice: 1, sellPrice: 999, quantity: 999 },
+            medicine: { buyPrice: 1, sellPrice: 9999, quantity: 9999 },
+            tech: { buyPrice: 1, sellPrice: 9999, quantity: 9999 }
         }
     },
     {
@@ -136,9 +136,9 @@ export const CustomSystems = [
         hasMarket: true,
         hasSpecial: false,
         marketOverrides: {
-            ore: { buyPrice: 100, sellPrice: 80, quantity: 500 },
-            robotics: { buyPrice: 120, sellPrice: 100, quantity: 850 },
-            fuel: { buyPrice: 60, sellPrice: 40, quantity: 900 }
+            ore: { buyPrice: 1, sellPrice: 999, quantity: 999 },
+            robotics: { buyPrice: 1, sellPrice: 9999, quantity: 9999 },
+            fuel: { buyPrice: 1, sellPrice: 9999, quantity: 9999 }
         }
     }
 ];
