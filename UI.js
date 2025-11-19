@@ -19,7 +19,7 @@ export class UI {
         this.camera = {
             x: 0,
             y: 0,
-            zoom: 6,
+            zoom: 3, // Initial zoom
             minZoom: 1,
             maxZoom: 15
         };
@@ -35,7 +35,7 @@ export class UI {
         this.systemContainer = null;
         this.shipContainer = null;
         this.shipIndicatorEl = null;
-        this.targetPointerEl = null; // Reference to new pointer
+        this.targetPointerEl = null;
 
         // Internal update scheduling
         this.pendingUpdate = false;
@@ -220,77 +220,111 @@ export class UI {
     }
 
     _onAnimationFrame() {
+        // Update pointer every frame to ensure smoothness during pan/zoom
+        this.updateTargetPointer(); 
         this.updateShipPosition();
-        this.updateTargetPointer(); // NEW: Smart Pointer Logic
         requestAnimationFrame(this._onAnimationFrame);
     }
 
-    // --- SMART TARGET POINTER LOGIC ---
+    // --- CORRECTED SMART POINTER LOGIC ---
     updateTargetPointer() {
-        if (!this.targetPointerEl || !this.galaxyCanvas) return;
+        if (!this.targetPointerEl || !this.galaxyCanvas || !this.gameState.targetSystem) {
+            if(this.targetPointerEl) this.targetPointerEl.style.display = 'none';
+            return;
+        }
 
         const target = this.gameState.targetSystem;
-        const ship = this.gameState.ship;
-
-        // 1. If no target or we are at target, hide pointer
-        if (!target || target === this.gameState.currentSystem) {
+        
+        // Hide if we are at the target system
+        if (target === this.gameState.currentSystem) {
             this.targetPointerEl.style.display = 'none';
             return;
         }
 
-        // 2. Calculate Screen Vector relative to Center
-        // Ship is always visually at center.
-        const dx = target.x - ship.x;
-        const dy = target.y - ship.y;
-        
-        // Convert world delta to screen pixels based on current zoom
-        const screenX = dx * this.camera.zoom;
-        const screenY = dy * this.camera.zoom;
-
-        // 3. Determine Bounds
+        // 1. Calculate Target Position on Screen relative to Camera Center
         const w = this.galaxyCanvas.clientWidth;
         const h = this.galaxyCanvas.clientHeight;
         const cx = w / 2;
         const cy = h / 2;
-        
-        // Margin from edge of screen (e.g. 45px)
-        const margin = 45;
-        const maxW = (w / 2) - margin;
-        const maxH = (h / 2) - margin;
+
+        // Transform World Coordinate -> Screen Coordinate
+        // screenX = (worldX - cameraX) * zoom + centerX
+        const targetScreenX = (target.x - this.camera.x) * this.camera.zoom + cx;
+        const targetScreenY = (target.y - this.camera.y) * this.camera.zoom + cy;
+
+        // 2. Determine Screen Bounds with Margin
+        const margin = 50; // Padding from edge
+        const minX = margin;
+        const maxX = w - margin;
+        const minY = margin;
+        const maxY = h - margin;
 
         let finalX, finalY, rotation;
 
-        // 4. Check if Target is On-Screen
-        if (Math.abs(screenX) < maxW && Math.abs(screenY) < maxH) {
-            // ON SCREEN: Position pointer directly above the star
-            finalX = cx + screenX;
-            finalY = cy + screenY - 30; // 30px above star
-            rotation = 180; // Arrow points down at star
+        // 3. Check if Target is On-Screen
+        const isOnScreen = (
+            targetScreenX >= minX && 
+            targetScreenX <= maxX && 
+            targetScreenY >= minY && 
+            targetScreenY <= maxY
+        );
+
+        if (isOnScreen) {
+            // --- ON SCREEN ---
+            // Position arrow floating slightly above the star
+            finalX = targetScreenX;
+            finalY = targetScreenY - 30;
+            rotation = 180; // Pointing DOWN at the star
         } else {
-            // OFF SCREEN: Clamp to edge
-            const angle = Math.atan2(screenY, screenX);
+            // --- OFF SCREEN ---
+            // Calculate vector from Center to Target Screen Pos
+            const dx = targetScreenX - cx;
+            const dy = targetScreenY - cy;
+            const angle = Math.atan2(dy, dx); // Radians
+
+            // Clamp to Ellipse/Box edge
+            // We scale the vector so it hits the bounding box defined by margin
+            // Slope m = dy / dx
             
-            // Circular clamp logic (uses smaller dimension to keep UI clean)
-            const radius = Math.min(maxW, maxH);
-            finalX = cx + Math.cos(angle) * radius;
-            finalY = cy + Math.sin(angle) * radius;
+            const wHalf = (w / 2) - margin;
+            const hHalf = (h / 2) - margin;
             
-            // Rotate arrow to point outward (Math.atan2 0 is right, +90 to match UP icon)
+            // Simple Clamping to edge of bounding box
+            // Calculate intersection with the box edges
+            const absCos = Math.abs(Math.cos(angle));
+            const absSin = Math.abs(Math.sin(angle));
+            
+            // Which wall does it hit?
+            if (wHalf * absSin <= hHalf * absCos) {
+                // Hits vertical wall (left or right)
+                finalX = cx + (dx > 0 ? wHalf : -wHalf);
+                finalY = cy + (dx > 0 ? wHalf : -wHalf) * Math.tan(angle);
+            } else {
+                // Hits horizontal wall (top or bottom)
+                finalY = cy + (dy > 0 ? hHalf : -hHalf);
+                finalX = cx + (dy > 0 ? hHalf : -hHalf) / Math.tan(angle);
+            }
+
+            // Rotate arrow to point outward
+            // angle 0 is Right. -90 is Up.
+            // CSS rotation: 0deg is determined by icon. fa-chevron-up points UP.
+            // So if angle is -90deg (-PI/2), rotation should be 0deg.
+            // Rotation = angleDeg + 90
             rotation = (angle * 180 / Math.PI) + 90;
         }
 
-        // 5. Apply Styles
+        // 4. Apply Styles
         this.targetPointerEl.style.display = 'flex';
         this.targetPointerEl.style.left = `${finalX}px`;
         this.targetPointerEl.style.top = `${finalY}px`;
-        this.targetPointerEl.style.transform = `translate(-50%, -50%)`; // Centered anchor
+        this.targetPointerEl.style.transform = `translate(-50%, -50%)`; // Center the div itself
 
         const arrow = this.targetPointerEl.querySelector('.pointer-arrow');
         if (arrow) {
             arrow.style.transform = `rotate(${rotation}deg)`;
         }
 
-        // Update Text
+        // 5. Update Text
         const dist = this.gameState.calculateDistance(this.gameState.currentSystem, target);
         const nameEl = document.getElementById('pointer-name');
         const distEl = document.getElementById('pointer-dist');
@@ -378,7 +412,8 @@ export class UI {
             dotEl.style.boxShadow = isTarget ? '0 0 10px #ffcc66, 0 0 20px #ffcc66' : '0 0 10px currentColor';
             dotEl.style.zIndex = isTarget ? '100' : '2';
         }
-
+        
+        // Ensure ship position is updated with view
         this.updateShipPosition();
     }
 
@@ -398,7 +433,6 @@ export class UI {
     centerCameraOnShip() {
         this.camera.x = this.gameState.ship.x;
         this.camera.y = this.gameState.ship.y;
-        this.camera.zoom = 3.0;
         this.scheduleUpdate();
     }
 
@@ -1006,7 +1040,7 @@ export class UI {
     }
 
     setupAppEventListeners() {
-        // Open Galaxy Map
+        // Open Galaxy Map Button
         const mapBtn = document.getElementById('open-map-btn');
         if (mapBtn) {
             mapBtn.addEventListener('click', () => {
@@ -1075,8 +1109,8 @@ export class UI {
                     
                     if (!this.gameState.currentSystem.discovered) {
                         this.gameState.currentSystem.discovered = true;
-                        // Refresh map cache
-                        this.galaxyMap.setup();
+                        // Update map color cache if needed
+                        this.galaxyMap.setup(); 
                         this.scheduleUpdate();
                     }
                     
