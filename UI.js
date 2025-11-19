@@ -24,6 +24,8 @@ export class UI {
 
         // Initialize Background System
         this.background = new StarBackground({
+            tileSize: 1024,  // Larger tiles = fewer render calls
+            nebulaDensity: 12, // How many cloud blobs
             tileSize: 1024,
             farStarCount: 600,
             nearStarCount: 200,
