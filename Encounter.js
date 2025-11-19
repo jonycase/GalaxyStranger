@@ -1,3 +1,4 @@
+// Encounter.js
 export class Encounter {
     constructor(player, gameState, options = {}) {
         this.player = player;
@@ -13,6 +14,11 @@ export class Encounter {
     start() {
         this.active = true;
         this.log('Encounter started!');
+        
+        // CRITICAL UX FIX: Close Galaxy Map if open
+        const mapModal = document.getElementById('galaxy-map-modal');
+        if (mapModal) mapModal.style.display = 'none';
+        
         this.updateUI();
         this.renderOptions();
     }
@@ -21,6 +27,7 @@ export class Encounter {
         this.active = false;
         this.log('Encounter ended.');
         this.updateUI();
+        this.closeEncounterModal();
         return result;
     }
 
@@ -35,16 +42,18 @@ export class Encounter {
         const iconEl = document.getElementById('encounter-icon');
         const contentEl = document.getElementById('encounter-content');
         
-        // Update modal content
-        titleEl.textContent = this.title;
-        iconEl.className = `fas ${this.iconClass}`;
-        
-        // Update encounter-specific content
-        this.renderContent(contentEl);
-        
-        // Show the modal
-        modal.style.opacity = '1';
-        modal.style.pointerEvents = 'all';
+        if (modal) {
+            // Update modal content
+            if (titleEl) titleEl.textContent = this.title;
+            if (iconEl) iconEl.className = `fas ${this.iconClass}`;
+            
+            // Update encounter-specific content
+            if (contentEl) this.renderContent(contentEl);
+            
+            // Show the modal
+            modal.style.opacity = '1';
+            modal.style.pointerEvents = 'all';
+        }
     }
 
     updateLog() {
@@ -81,7 +90,6 @@ export class Encounter {
     handleAction(action) {
         if (action === 'close') {
             this.end();
-            this.closeEncounterModal();
             return;
         }
         
@@ -111,7 +119,7 @@ export class Encounter {
     }
     
     updateMainUI() {
-        // Update the main UI
+        // Update the main UI elements
         const creditsEl = document.getElementById('credits');
         const fuelEl = document.getElementById('fuel');
         const hullEl = document.getElementById('hull');

@@ -15,10 +15,36 @@
 </head>
 <body>
     <div id="app"></div>
-    <!-- This script seems to be for a different framework (Mithril) and is not used by the main game logic.
-         If you are not using it, it can be safely removed. -->
-    <!-- <script src="bin/main.js"></script> -->
     
+    <!-- Galaxy Map Widget (New) -->
+    <div id="galaxy-map-modal" class="galaxy-map-modal" style="display: none;">
+        <div class="map-widget-container">
+            <div class="map-header">
+                <h2><i class="fas fa-map-marked-alt"></i> GALAXY MAP</h2>
+                <button id="close-map-btn" class="btn-close"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="map-canvas-wrapper">
+                <canvas id="full-galaxy-canvas"></canvas>
+                
+                <!-- Controls floating inside the canvas area -->
+                <div class="map-controls-overlay">
+                    <div class="search-container">
+                        <input type="text" id="map-search-input" placeholder="System Name..." list="discovered-systems-list">
+                        <datalist id="discovered-systems-list"></datalist>
+                        <button id="map-search-btn" class="btn small"><i class="fas fa-search"></i></button>
+                    </div>
+                    
+                    <div class="map-info-box" id="map-selected-info">
+                        <div class="info-title" style="color: #ffcc66; border-bottom: 1px solid #555; padding-bottom: 3px;">SELECT TARGET</div>
+                        <div class="info-details" style="font-size: 13px; line-height: 1.4; color: #ccc;">--</div>
+                        <button id="set-target-btn" class="btn btn-action small" style="margin-top: 5px; width: 100%;" disabled>SET COURSE</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Screen -->
     <div id="loading-screen" class="loading-screen" style="display: none;">
         <div style="font-size: 24px; margin-bottom: 20px;">Generating Galaxy...</div>
@@ -94,11 +120,19 @@
                 <canvas id="galaxy-canvas" width="800" height="600"></canvas>
                 <div id="system-container"></div>
                 <div id="ship-container"></div>
-                <!-- The old travel effect div is removed, as the effect is now part of the ship indicator -->
+                
+                <!-- Target Pointer Overlay (New) -->
+                <div id="target-pointer" class="target-pointer" style="display: none;">
+                    <div class="pointer-arrow"><i class="fas fa-chevron-up"></i></div>
+                    <div class="pointer-info">
+                        <span id="pointer-name">Target</span>
+                        <span id="pointer-dist">0 LY</span>
+                    </div>
+                </div>
+
                 <div class="crt-overlay"></div>
                 <div id="notification" class="notification"></div>
                 <div id="system-info-panel" class="system-info-panel"></div>
-                <!-- Old map movement controls removed as per instructions -->
             </div>
             <div class="ui-panel">
                 <div class="tabs">
@@ -146,12 +180,16 @@
                                 <span class="stat-value" id="fuel-cost">0</span>
                             </div>
                         </div>
-                        <div class="mobile-controls">
-                            <button id="travel-btn" class="btn btn-action mobile-btn">
+                        <div class="mobile-controls" style="flex-wrap: wrap;">
+                            <button id="travel-btn" class="btn btn-action mobile-btn" style="flex: 1 0 45%;">
                                 <i class="fas fa-space-shuttle"></i> TRAVEL
                             </button>
-                            <button id="refuel-btn" class="btn mobile-btn">
+                            <button id="refuel-btn" class="btn mobile-btn" style="flex: 1 0 45%;">
                                 <i class="fas fa-gas-pump"></i> REFUEL
+                            </button>
+                            <!-- New Map Button -->
+                            <button id="open-map-btn" class="btn mobile-btn" style="flex: 1 0 100%; margin-top: 5px; background: linear-gradient(to bottom, #336699, #224466);">
+                                <i class="fas fa-map-marked-alt"></i> OPEN GALAXY MAP
                             </button>
                         </div>
                     </div>
@@ -228,76 +266,6 @@
             </div>
         </div>
     </div>
-    <!-- Main Game Script -->
-    <script type="module">
-        import { GameState } from './GameState.js';
-        import { EncounterManager } from './EncounterManager.js';
-        import { UI } from './UI.js';
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const gameState = new GameState();
-            const encounterManager = new EncounterManager(gameState);
-            const ui = new UI(gameState, encounterManager);
-            
-            // Initialize the game
-            window.addEventListener('load', () => {
-                // Galaxy size selection
-                document.querySelectorAll('.size-option').forEach(option => {
-                    option.addEventListener('click', () => {
-                        // Highlight selection
-                        document.querySelectorAll('.size-option').forEach(o => o.classList.remove('selected'));
-                        option.classList.add('selected');
-                        
-                        // Get selected shape
-                        const shape = document.querySelector('.shape-option.selected')?.dataset.shape || 'balanced';
-
-                        // Start game after brief pause
-                        setTimeout(() => {
-                            const size = parseInt(option.dataset.size);
-                            const initScreen = document.getElementById('init-screen');
-                            const gameContent = document.getElementById('game-content');
-                            if (initScreen) initScreen.style.display = 'none';
-                            if (gameContent) gameContent.style.display = 'flex';
-                            
-                            // Store shape in gameState and initialize game with callback
-                            gameState.galaxyShape = shape; 
-                            gameState.initGame(size, () => {
-                                ui.setupCanvas();
-                                ui.updateUI(); // Add this to initialize UI
-                                ui.showNotification(`Welcome to ${gameState.currentSystem.name}!`);
-                            });
-                        }, 300);
-                    });
-                });
-                
-                // Add shape selection
-                document.querySelectorAll('.shape-option').forEach(option => {
-                    option.addEventListener('click', () => {
-                        document.querySelectorAll('.shape-option').forEach(o => o.classList.remove('selected'));
-                        option.classList.add('selected');
-                    });
-                });
-
-                // Game Over Screen Event Listener
-                document.getElementById('new-game-btn').addEventListener('click', () => {
-                    const gameOverScreen = document.getElementById('game-over-screen');
-                    if (gameOverScreen) gameOverScreen.style.display = 'none';
-                    
-                    const initScreen = document.getElementById('init-screen');
-                    if (initScreen) initScreen.style.display = 'flex';
-                    window.location.reload();
-                });
-            });
-                    // Set all systems as undiscovered at start
-        gameState.galaxy.forEach(system => {
-            system.discovered = false;
-        });
-        
-        // Mark starting system as discovered
-        if (gameState.currentSystem) {
-            gameState.currentSystem.discovered = true;
-        }
-        });
-    </script>
+    <script type="module" src="Game.js"></script>
 </body>
 </html>

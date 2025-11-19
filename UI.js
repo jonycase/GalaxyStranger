@@ -1,4 +1,5 @@
-// UI.js
+import { GalaxyMap } from './GalaxyMap.js';
+
 function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
@@ -10,8 +11,11 @@ export class UI {
     constructor(gameState, encounterManager) {
         this.gameState = gameState;
         this.encounterManager = encounterManager;
+        
+        // Initialize the Mega Optimized Map
+        this.galaxyMap = new GalaxyMap(gameState, this);
 
-        // Camera properties
+        // Camera properties for Local View
         this.camera = {
             x: 0,
             y: 0,
@@ -31,6 +35,7 @@ export class UI {
         this.systemContainer = null;
         this.shipContainer = null;
         this.shipIndicatorEl = null;
+        this.targetPointerEl = null; // Reference to new pointer
 
         // Internal update scheduling
         this.pendingUpdate = false;
@@ -55,6 +60,7 @@ export class UI {
         this.galaxyCanvas = document.getElementById('galaxy-canvas');
         this.systemContainer = document.getElementById('system-container');
         this.shipContainer = document.getElementById('ship-container');
+        this.targetPointerEl = document.getElementById('target-pointer');
 
         if (!this.galaxyCanvas || !this.systemContainer || !this.shipContainer) return;
 
@@ -67,6 +73,9 @@ export class UI {
         // Cache systems in a Map for O(1) lookup later
         this.systemMap.clear();
         this.gameState.galaxy.forEach(sys => this.systemMap.set(sys.id, sys));
+        
+        // Setup the Global Map (Grid Cache)
+        this.galaxyMap.setup();
 
         // Pre-create a small pool to avoid creating nodes constantly
         this._createPool(Math.min(120, Math.max(40, Math.floor(this.gameState.galaxySize / 10))));
@@ -92,6 +101,7 @@ export class UI {
         window.addEventListener('resize', () => {
             this.handleResize();
             this.scheduleUpdate();
+            if(this.galaxyMap) this.galaxyMap.resize();
         });
 
         // Start the RAF loop
@@ -108,7 +118,6 @@ export class UI {
         this.activeSystems.clear();
     }
 
-    // Fix: Separated resize logic to ensure stars draw when tab becomes visible
     handleResize() {
         if (!this.galaxyCanvas) return;
         
@@ -212,7 +221,82 @@ export class UI {
 
     _onAnimationFrame() {
         this.updateShipPosition();
+        this.updateTargetPointer(); // NEW: Smart Pointer Logic
         requestAnimationFrame(this._onAnimationFrame);
+    }
+
+    // --- SMART TARGET POINTER LOGIC ---
+    updateTargetPointer() {
+        if (!this.targetPointerEl || !this.galaxyCanvas) return;
+
+        const target = this.gameState.targetSystem;
+        const ship = this.gameState.ship;
+
+        // 1. If no target or we are at target, hide pointer
+        if (!target || target === this.gameState.currentSystem) {
+            this.targetPointerEl.style.display = 'none';
+            return;
+        }
+
+        // 2. Calculate Screen Vector relative to Center
+        // Ship is always visually at center.
+        const dx = target.x - ship.x;
+        const dy = target.y - ship.y;
+        
+        // Convert world delta to screen pixels based on current zoom
+        const screenX = dx * this.camera.zoom;
+        const screenY = dy * this.camera.zoom;
+
+        // 3. Determine Bounds
+        const w = this.galaxyCanvas.clientWidth;
+        const h = this.galaxyCanvas.clientHeight;
+        const cx = w / 2;
+        const cy = h / 2;
+        
+        // Margin from edge of screen (e.g. 45px)
+        const margin = 45;
+        const maxW = (w / 2) - margin;
+        const maxH = (h / 2) - margin;
+
+        let finalX, finalY, rotation;
+
+        // 4. Check if Target is On-Screen
+        if (Math.abs(screenX) < maxW && Math.abs(screenY) < maxH) {
+            // ON SCREEN: Position pointer directly above the star
+            finalX = cx + screenX;
+            finalY = cy + screenY - 30; // 30px above star
+            rotation = 180; // Arrow points down at star
+        } else {
+            // OFF SCREEN: Clamp to edge
+            const angle = Math.atan2(screenY, screenX);
+            
+            // Circular clamp logic (uses smaller dimension to keep UI clean)
+            const radius = Math.min(maxW, maxH);
+            finalX = cx + Math.cos(angle) * radius;
+            finalY = cy + Math.sin(angle) * radius;
+            
+            // Rotate arrow to point outward (Math.atan2 0 is right, +90 to match UP icon)
+            rotation = (angle * 180 / Math.PI) + 90;
+        }
+
+        // 5. Apply Styles
+        this.targetPointerEl.style.display = 'flex';
+        this.targetPointerEl.style.left = `${finalX}px`;
+        this.targetPointerEl.style.top = `${finalY}px`;
+        this.targetPointerEl.style.transform = `translate(-50%, -50%)`; // Centered anchor
+
+        const arrow = this.targetPointerEl.querySelector('.pointer-arrow');
+        if (arrow) {
+            arrow.style.transform = `rotate(${rotation}deg)`;
+        }
+
+        // Update Text
+        const dist = this.gameState.calculateDistance(this.gameState.currentSystem, target);
+        const nameEl = document.getElementById('pointer-name');
+        const distEl = document.getElementById('pointer-dist');
+        
+        if (nameEl) nameEl.textContent = target.name;
+        if (distEl) distEl.textContent = dist.toFixed(1) + " LY";
     }
 
     drawBackground() {
@@ -241,19 +325,16 @@ export class UI {
         const activeSet = this.activeSystems;
         const sysMap = this.systemMap;
 
+        // Remove out of view
         for (const [id, elements] of activeSet.entries()) {
             const sys = sysMap.get(id);
-            if (!sys) {
-                this._releaseElements(elements);
-                activeSet.delete(id);
-                continue;
-            }
-            if (sys.x < rect.left || sys.x > rect.right || sys.y < rect.top || sys.y > rect.bottom) {
+            if (!sys || sys.x < rect.left || sys.x > rect.right || sys.y < rect.top || sys.y > rect.bottom) {
                 this._releaseElements(elements);
                 activeSet.delete(id);
             }
         }
 
+        // Add into view
         for (let i = 0, len = this.gameState.galaxy.length; i < len; i++) {
             const sys = this.gameState.galaxy[i];
             if (sys.x >= rect.left && sys.x <= rect.right && sys.y >= rect.top && sys.y <= rect.bottom) {
@@ -269,6 +350,7 @@ export class UI {
             }
         }
 
+        // Update positions
         for (const [id, elements] of activeSet.entries()) {
             const sys = sysMap.get(id);
             if (!sys) continue;
@@ -290,8 +372,11 @@ export class UI {
                 dotEl.style.backgroundColor = desiredColor;
             }
 
+            // Highlighting
             dotEl.classList.toggle('selected-system', sys === this.gameState.currentSystem);
-            dotEl.style.boxShadow = (sys === this.gameState.targetSystem) ? '0 0 10px #ffcc66, 0 0 20px #ffcc66' : '0 0 10px currentColor';
+            const isTarget = (sys === this.gameState.targetSystem);
+            dotEl.style.boxShadow = isTarget ? '0 0 10px #ffcc66, 0 0 20px #ffcc66' : '0 0 10px currentColor';
+            dotEl.style.zIndex = isTarget ? '100' : '2';
         }
 
         this.updateShipPosition();
@@ -337,9 +422,7 @@ export class UI {
         this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
     }
 
-    // --- NEW UNIFIED INPUT SYSTEM ---
-
-    // 1. Hover effects only (Selection moved to Camera Controls)
+    // --- INPUT SYSTEM ---
     setupHoverInput() {
         this.systemContainer.addEventListener('pointermove', (e) => {
             const target = e.target.closest('.system-dot');
@@ -356,7 +439,6 @@ export class UI {
         this.systemContainer.addEventListener('pointerleave', () => this.hideSystemInfo());
     }
 
-    // 2. Helper for Selection
     selectSystem(systemId) {
         const system = this.systemMap.get(systemId);
         if (system && system !== this.gameState.currentSystem) {
@@ -367,7 +449,6 @@ export class UI {
         }
     }
 
-    // 3. Proximity Click Logic (The "Easy Click" Fix)
     handleProximityClick(clientX, clientY, radius) {
         const rect = this.galaxyCanvas.getBoundingClientRect();
         const clickX = clientX - rect.left;
@@ -376,7 +457,6 @@ export class UI {
         let closestDist = radius;
         let closestId = null;
 
-        // Iterate currently visible systems
         for (const [id, elements] of this.activeSystems) {
             const sys = this.systemMap.get(id);
             if (!sys) continue;
@@ -397,7 +477,6 @@ export class UI {
         }
     }
 
-    // 4. Unified Camera + Selection Controller
     setupCameraControls() {
         const container = document.querySelector('.map-container');
         if (!container || this.cameraControlsInitialized) return;
@@ -409,23 +488,17 @@ export class UI {
         let lastTouchDistance = 0;
         let totalDragDistance = 0;
 
-        // Logic to decide if it was a click or a drag
         const handleTap = (clientX, clientY, target) => {
             if (isTraveling) return;
-
-            // Did we hit a specific dot?
             const dot = target.closest('.system-dot');
             if (dot) {
                 const systemId = parseInt(dot.dataset.id, 10);
                 this.selectSystem(systemId);
                 return;
             }
-
-            // Otherwise check proximity
             this.handleProximityClick(clientX, clientY, 45);
         };
 
-        // --- MOUSE ---
         container.addEventListener('mousedown', (e) => {
             isDragging = true;
             startX = e.clientX;
@@ -458,7 +531,7 @@ export class UI {
         container.addEventListener('mouseup', endMouse);
         container.addEventListener('mouseleave', () => { isDragging = false; container.style.cursor = 'grab'; });
 
-        // --- TOUCH (Passive: False) ---
+        // Touch Controls
         container.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 isDragging = true;
@@ -511,43 +584,26 @@ export class UI {
             }
         });
 
-        // --- WHEEL ---
         container.addEventListener('wheel', (e) => {
             e.preventDefault();
             const zoomAmount = e.deltaY > 0 ? -0.1 : 0.1;
             this.setZoom(this.camera.zoom + zoomAmount);
         }, { passive: false });
         
-        // Center Button
-        const existingBtn = document.querySelector('.map-center-btn');
-        if (existingBtn) existingBtn.remove();
-
         const centerBtn = document.createElement('div');
         centerBtn.className = 'map-center-btn';
         centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
         centerBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const startX = this.camera.x;
-            const startY = this.camera.y;
-            const startTime = Date.now();
-            const duration = 500;
-            
-            const animateCenter = () => {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const easedProgress = easeInOutCubic(progress);
-                this.camera.x = startX + (this.gameState.ship.x - startX) * easedProgress;
-                this.camera.y = startY + (this.gameState.ship.y - startY) * easedProgress;
-                this.scheduleUpdate();
-                if (progress < 1) requestAnimationFrame(animateCenter);
-            };
-            animateCenter();
+            this.centerCameraOnShip();
         });
         container.appendChild(centerBtn);
     }
 
-    // UI update
     updateUI() {
+        // Sync Widget UI
+        if(this.galaxyMap) this.galaxyMap.updateInfoBox();
+
         const creditsEl = document.getElementById('credits');
         const fuelEl = document.getElementById('fuel');
         const hullEl = document.getElementById('hull');
@@ -704,6 +760,8 @@ export class UI {
                         this.showNotification(result.message);
                         this.scheduleUpdate();
                         this.updateUI();
+                        // Refresh Map Grid
+                        this.galaxyMap.setup();
                     } else {
                         this.showNotification(result.message);
                     }
@@ -948,6 +1006,18 @@ export class UI {
     }
 
     setupAppEventListeners() {
+        // Open Galaxy Map
+        const mapBtn = document.getElementById('open-map-btn');
+        if (mapBtn) {
+            mapBtn.addEventListener('click', () => {
+                if (isTraveling) {
+                    this.showNotification("Cannot open map while traveling!");
+                    return;
+                }
+                this.galaxyMap.open();
+            });
+        }
+
         const travelBtn = document.getElementById('travel-btn');
         if (travelBtn) travelBtn.addEventListener('click', () => {
             if (isTraveling) {
@@ -1005,6 +1075,8 @@ export class UI {
                     
                     if (!this.gameState.currentSystem.discovered) {
                         this.gameState.currentSystem.discovered = true;
+                        // Refresh map cache
+                        this.galaxyMap.setup();
                         this.scheduleUpdate();
                     }
                     

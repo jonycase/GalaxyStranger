@@ -8,7 +8,7 @@ import {
 
 export class GameState {
     constructor() {
-        this.credits = 10001;
+        this.credits = 999999;
         this.fuel = 15;
         this.maxFuel = 15;
         this.cargo = [];
@@ -80,12 +80,6 @@ export class GameState {
             { id: 'fuel', name: 'Fuel Tanks', description: 'Increases fuel capacity', cost: 2500, effect: 5, icon: 'fas fa-gas-pump' },
             { id: 'radar', name: 'Long-Range Radar', description: 'Allows scanning nearby systems', cost: 5000, effect: 15, icon: 'fas fa-satellite' }
         ];
-        
-        this.loan = {
-            amount: 0,
-            dueDate: 0,
-            interest: 0.1
-        };
         
         this.encounters = [
             { type: 'pirate', name: 'Pirate Attack', weight: 30 },
@@ -217,7 +211,6 @@ export class GameState {
                 points.push({ x: system.x, y: system.y });
                 this.galaxy.push(system);
 
-                // Inside generateGalaxy method
                 if ((nextId - CustomSystems.length) % Math.max(1, Math.floor(chunkSize / 2)) === 0) {
                     const pct = Math.round((nextId + 1) / this.galaxySize * 100);
                     this.updateLoadingProgress(pct, `Creating system: ${system.name}`);
@@ -251,7 +244,6 @@ export class GameState {
     }
 
     generateMarket(system) {
-        // Handle custom system market
         if (system.economy === 'custom' && system.marketOverrides) {
             Object.entries(system.marketOverrides).forEach(([goodId, data]) => {
                 const good = this.goods.find(g => g.id === goodId);
@@ -273,10 +265,8 @@ export class GameState {
         if (!profile || !profile.hasMarket) return;
         
         this.goods.forEach(good => {
-            // Skip illegal goods in high-security systems
             if (good.illegal && system.security === 'high') return;
             
-            // Apply economy-specific modifiers
             let baseModifier = 1;
             let quantityModifier = 1;
             
@@ -291,13 +281,11 @@ export class GameState {
                 quantityModifier = 0.8;
             }
             
-            // Tech level adjustments
             switch(system.techLevel) {
                 case 'low': baseModifier *= 1.3; break;
                 case 'high': baseModifier *= 0.9; break;
             }
             
-            // Calculate price and quantity
             const rand = 0.8 + Math.random() * 0.4;
             const price = Math.round(good.basePrice * baseModifier * rand);
             
@@ -330,7 +318,6 @@ export class GameState {
 
     setStartingSystem() {
         if (this.galaxy.length === 0) return;
-        // Find a populated system to start in
         const populated = this.galaxy.filter(sys => 
             sys.economy !== 'unpopulated' && sys.economy !== 'custom'
         );
@@ -362,10 +349,8 @@ export class GameState {
             return { success: false, message: 'Not enough fuel!' };
         }
         
-        // Deduct fuel
         this.fuel -= fuelCost;
         
-        // Update game state for travel
         this.ship.traveling = true;
         this.ship.travelProgress = 0;
         this.ship.x = this.currentSystem.x;
@@ -373,7 +358,7 @@ export class GameState {
         this.ship.targetX = this.targetSystem.x;
         this.ship.targetY = this.targetSystem.y;
         
-        // Calculate rotation angle for ship
+        // Update ship rotation for HUD
         const dx = this.ship.targetX - this.ship.x;
         const dy = this.ship.targetY - this.ship.y;
         const angle = Math.atan2(dy, dx) * (180 / Math.PI);
@@ -392,12 +377,10 @@ export class GameState {
         this.currentSystem = this.targetSystem;
         this.targetSystem = null;
         
-        // Mark system as discovered
         if (!this.currentSystem.discovered) {
             this.currentSystem.discovered = true;
         }
         
-        // Add days traveled to total
         const distance = this.calculateDistance(
             {x: this.ship.x, y: this.ship.y}, 
             {x: this.ship.targetX, y: this.ship.targetY}
@@ -406,14 +389,12 @@ export class GameState {
         this.distanceTraveled += distance;
         this.systemsVisited++;
         
-        // Restock current system
         this.restockSystem(this.currentSystem);
         
         return { success: true, message: `Arrived at ${this.currentSystem.name}` };
     }
     
     scanNearbySystems() {
-        // Check if player has radar
         if (this.ship.radar === 0) {
             return { success: false, message: "You need radar to scan systems!" };
         }
@@ -421,18 +402,16 @@ export class GameState {
         const baseRadius = 15;
         const cost = Math.max(5, baseCost - this.ship.radar);
         const radius = baseRadius + (5 * this.ship.radar);
-        // Check fuel
+
         if (this.fuel < cost) {
             return { success: false, message: `Not enough fuel! Need ${cost} units.` };
         }
         
-        // Deduct fuel
         this.fuel -= cost;
         
-        // Find systems within radius
         let discoveredCount = 0;
         this.galaxy.forEach(system => {
-            if (system === this.currentSystem) return; // Skip current
+            if (system === this.currentSystem) return;
             
             const distance = this.calculateDistance(this.currentSystem, system);
             if (distance <= radius && !system.discovered) {
@@ -458,14 +437,10 @@ export class GameState {
             return { success: false, message: 'Fuel tank full!' };
         }
     
-        // Default cost per unit if no market exists
         let costPerUnit = 15;
-    
-        // Check if the current system has a market and a price for 'fuel'
         if (this.currentSystem.hasMarket && this.currentSystem.market['fuel']) {
             costPerUnit = this.currentSystem.market['fuel'].buyPrice;
         } else {
-            // Fallback to tech-level based price if no market data
             switch(this.currentSystem.techLevel) {
                 case 'high': costPerUnit = 10; break;
                 case 'medium': costPerUnit = 15; break;
@@ -496,27 +471,20 @@ export class GameState {
         if (!marketItem) return { success: false, message: 'Item not traded here' };
         
         if (action === 'buy') {
-            // Check if player has enough credits
             if (this.credits < marketItem.buyPrice) {
                 return { success: false, message: 'Not enough credits!' };
             }
-            
-            // Check if item is in stock
             if (marketItem.quantity <= 0) {
                 return { success: false, message: 'Item out of stock!' };
             }
-            
-            // Check cargo space
             const cargoSpace = this.cargo.reduce((sum, item) => sum + item.quantity, 0);
             if (cargoSpace >= this.cargoCapacity) {
                 return { success: false, message: 'Cargo hold full!' };
             }
             
-            // Process transaction
             this.credits -= marketItem.buyPrice;
             marketItem.quantity--;
             
-            // Add to cargo
             const existingItem = this.cargo.find(item => item.id === goodId);
             if (existingItem) {
                 existingItem.quantity++;
@@ -537,17 +505,14 @@ export class GameState {
             };
         } 
         else if (action === 'sell' || action === 'sell-one') {
-            // Find the cargo item
             const cargoItem = this.cargo.find(item => item.id === goodId);
             if (!cargoItem || cargoItem.quantity < 1) {
                 return { success: false, message: 'Not enough in cargo!' };
             }
             
-            // Process transaction
             this.credits += marketItem.sellPrice;
             cargoItem.quantity--;
             
-            // Remove if quantity is 0
             if (cargoItem.quantity === 0) {
                 this.cargo = this.cargo.filter(item => item.id !== goodId);
             }
@@ -626,7 +591,6 @@ export class GameState {
         if (!contract) return { success: false, message: 'Contract not found' };
         
         if (contract.type === 'hunt') {
-            // Set target system for pirate hunt
             this.targetSystem = contract.targetSystem;
             return { 
                 success: true, 
@@ -634,8 +598,6 @@ export class GameState {
             };
         } else if (contract.type === 'delivery') {
             if (contract.originSystem === this.currentSystem) {
-                // Pick up goods
-                // Check if cargo space is available
                 const cargoSpace = this.cargo.reduce((sum, item) => sum + item.quantity, 0);
                 if (cargoSpace + contract.quantity > this.cargoCapacity) {
                     return { 
@@ -644,7 +606,6 @@ export class GameState {
                     };
                 }
                 
-                // Add goods to cargo
                 const existingItem = this.cargo.find(item => item.id === contract.good);
                 if (existingItem) {
                     existingItem.quantity += contract.quantity;
@@ -665,7 +626,6 @@ export class GameState {
                     message: `Picked up ${contract.quantity} units of ${good.name} for delivery.`
                 };
             } else if (contract.targetSystem === this.currentSystem) {
-                // Deliver goods
                 const cargoItem = this.cargo.find(item => item.id === contract.good && item.contractId === contract.id);
                 if (!cargoItem || cargoItem.quantity < contract.quantity) {
                     return { 
@@ -674,7 +634,6 @@ export class GameState {
                     };
                 }
                 
-                // Complete delivery
                 cargoItem.quantity -= contract.quantity;
                 if (cargoItem.quantity === 0) {
                     this.cargo = this.cargo.filter(item => item.id !== contract.good || item.quantity > 0);
@@ -710,13 +669,11 @@ export class GameState {
     restockSystem(system) {
         const daysPassed = this.totalDaysTraveled - system.lastRestock;
         
-        // Calculate partial restock (7-10 days)
         if (daysPassed >= this.restockIntervalMin && daysPassed < this.fullRestockIntervalMin) {
             this.goods.forEach(good => {
                 if (system.market[good.id]) {
                     const maxQuantity = system.market[good.id].maxQuantity;
                     const currentQuantity = system.market[good.id].quantity;
-                    // Restock to half of max
                     const targetQuantity = Math.floor(maxQuantity * 0.5);
                     if (currentQuantity < targetQuantity) {
                         system.market[good.id].quantity = Math.min(targetQuantity, currentQuantity + 5);
@@ -725,20 +682,17 @@ export class GameState {
             });
             system.lastRestock = this.totalDaysTraveled - (this.fullRestockIntervalMin - daysPassed - 1);
         } 
-        // Calculate full restock (11-14 days)
         else if (daysPassed >= this.fullRestockIntervalMin) {
             this.goods.forEach(good => {
                 if (system.market[good.id]) {
                     const maxQuantity = system.market[good.id].maxQuantity;
                     const currentQuantity = system.market[good.id].quantity;
-                    // Restock to full
                     const targetQuantity = maxQuantity;
                     if (currentQuantity < targetQuantity) {
                         system.market[good.id].quantity = Math.min(targetQuantity, currentQuantity + 10);
                     }
                 }
             });
-            // Update last restock time
             system.lastRestock = this.totalDaysTraveled;
         }
         
@@ -748,13 +702,11 @@ export class GameState {
     generateContracts() {
         this.contracts = [];
         
-        // Only generate contracts if we have systems
         if (this.galaxy.length === 0) {
             console.error("Cannot generate contracts - galaxy is empty");
             return;
         }
         
-        // Pirate hunt contracts
         for (let i = 0; i < 3; i++) {
             const system = this.galaxy[Math.floor(Math.random() * this.galaxy.length)];
             const tier = 3 + Math.floor(Math.random() * 8);
@@ -771,10 +723,8 @@ export class GameState {
             });
         }
         
-        // Delivery contracts
         for (let i = 0; i < 2; i++) {
             const origin = this.galaxy[Math.floor(Math.random() * this.galaxy.length)];
-            // Make sure destination is different from origin
             let destination;
             do {
                 destination = this.galaxy[Math.floor(Math.random() * this.galaxy.length)];

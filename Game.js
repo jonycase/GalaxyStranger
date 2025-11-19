@@ -10,27 +10,55 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize the game
     window.addEventListener('load', () => {
         // Galaxy size selection
-        document.querySelectorAll('.size-option').forEach(option => {
-            option.addEventListener('click', () => {
-                // Highlight selection
-                document.querySelectorAll('.size-option').forEach(o => o.classList.remove('selected'));
-                option.classList.add('selected');
-                
-                // Start game after brief pause
-                setTimeout(() => {
-                    const size = parseInt(option.dataset.size);
-                    const initScreen = document.getElementById('init-screen');
-                    const gameContent = document.getElementById('game-content');
-                    if (initScreen) initScreen.style.display = 'none';
-                    if (gameContent) gameContent.style.display = 'flex';
+        const sizeOptions = document.querySelectorAll('.size-option');
+        if (sizeOptions) {
+            sizeOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    // Highlight selection
+                    document.querySelectorAll('.size-option').forEach(o => o.classList.remove('selected'));
+                    option.classList.add('selected');
                     
-                    gameState.initGame(size);
-                    ui.setupCanvas();
-                    ui.setupEventListeners();
-                    gameState.generateContracts();
-                    ui.updateUI();
-                }, 300);
+                    // Get selected shape
+                    const shape = document.querySelector('.shape-option.selected')?.dataset.shape || 'balanced';
+
+                    // Start game after brief pause
+                    setTimeout(() => {
+                        const size = parseInt(option.dataset.size);
+                        const initScreen = document.getElementById('init-screen');
+                        const gameContent = document.getElementById('game-content');
+                        
+                        if (initScreen) initScreen.style.display = 'none';
+                        if (gameContent) gameContent.style.display = 'flex';
+                        
+                        // Store shape in gameState and initialize game
+                        gameState.galaxyShape = shape; 
+                        gameState.initGame(size, () => {
+                            ui.setupCanvas();
+                            ui.updateUI(); 
+                            ui.showNotification(`Welcome to ${gameState.currentSystem.name}!`);
+                        });
+                    }, 300);
+                });
             });
-        });
+        }
+        
+        // Shape selection logic
+        const shapeOptions = document.querySelectorAll('.shape-option');
+        if (shapeOptions) {
+            shapeOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    document.querySelectorAll('.shape-option').forEach(o => o.classList.remove('selected'));
+                    option.classList.add('selected');
+                });
+            });
+        }
+
+        // Game Over Restart logic
+        const newGameBtn = document.getElementById('new-game-btn');
+        if (newGameBtn) {
+            newGameBtn.addEventListener('click', () => {
+                window.location.reload();
+            });
+        }
     });
 });
