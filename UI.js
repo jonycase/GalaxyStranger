@@ -1,13 +1,9 @@
 // UI.js
-import { StarBackground } from './Background.js';
-import { GalaxyMap } from './GalaxyMap.js';
-
-// Animation easing helper
 function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-// Global flag to prevent interaction during travel
+// Global flag for travel state
 let isTraveling = false;
 
 export class UI {
@@ -24,56 +20,34 @@ export class UI {
             maxZoom: 15
         };
 
-        // 1. Initialize Parallax Background
-        this.background = new StarBackground({
-            tileSize: 1024,
-            baseColor: '#020205',
-            nebulaDensity: 15
-        });
-
-        // 2. Initialize Galaxy Map (Big Map)
-        this.bigMap = new GalaxyMap(
-            gameState,
-            () => { /* On Close Callback (optional) */ },
-            (target) => { 
-                // On Set Target Callback
-                this.gameState.targetSystem = target;
-                this.updateUI();
-                this.showNotification(target ? `Destination Set: ${target.name}` : "Destination Cleared");
-                this.scheduleUpdate();
-            }
-        );
-
-        // Pools & Data Structures for Local View
+        // Pools & active sets
         this.systemPool = [];
         this.namePool = [];
         this.activeSystems = new Map();
         this.systemMap = new Map();
 
-        // DOM References
+        // DOM refs
         this.galaxyCanvas = null;
         this.systemContainer = null;
         this.shipContainer = null;
         this.shipIndicatorEl = null;
-        this.hudPointerEl = null;
 
-        // State flags
+        // Internal update scheduling
         this.pendingUpdate = false;
         this.cameraControlsInitialized = false;
 
-        // Bind animation frame to 'this'
+        // Bindings
         this._onAnimationFrame = this._onAnimationFrame.bind(this);
 
-        // Global click blocker during travel
+        // Block clicks while traveling
         document.addEventListener('click', (e) => {
             if (isTraveling && e.target.closest('button')) {
                 this.showNotification("Cannot interact while traveling!");
                 e.preventDefault();
-                e.stopPropagation();
             }
         }, true);
         
-        // Setup non-canvas event listeners (Buttons, Tabs)
+        // Setup app event listeners
         this.setupAppEventListeners();
     }
 
@@ -84,20 +58,20 @@ export class UI {
 
         if (!this.galaxyCanvas || !this.systemContainer || !this.shipContainer) return;
 
-        // CRITICAL: Disable browser gestures on the canvas for custom pinch/zoom
+        // CRITICAL: Disable browser gestures on the canvas
         this.galaxyCanvas.style.touchAction = 'none';
 
-        // Force initial resize calculation
+        // Force initial resize calculation to render background
         this.handleResize();
 
-        // Cache systems for fast lookup
+        // Cache systems in a Map for O(1) lookup later
         this.systemMap.clear();
         this.gameState.galaxy.forEach(sys => this.systemMap.set(sys.id, sys));
 
-        // Create DOM Pool
+        // Pre-create a small pool to avoid creating nodes constantly
         this._createPool(Math.min(120, Math.max(40, Math.floor(this.gameState.galaxySize / 10))));
 
-        // Create Ship Indicator
+        // Create ship indicator
         this.shipContainer.innerHTML = '';
         const shipIndicator = document.createElement('div');
         shipIndicator.className = 'ship-indicator';
@@ -105,185 +79,59 @@ export class UI {
         this.shipIndicatorEl = shipIndicator;
         this.shipContainer.appendChild(this.shipIndicatorEl);
 
-        // Create HUD Pointer Element
-        // Remove existing if hot-reloading
-        const existingHud = document.querySelector('.hud-pointer');
-        if(existingHud) existingHud.remove();
-
-        const hud = document.createElement('div');
-        hud.className = 'hud-pointer';
-        hud.style.display = 'none';
-        hud.innerHTML = `
-            <div class="hud-pointer-arrow"></div>
-            <div class="hud-pointer-info"></div>
-        `;
-        document.querySelector('.map-container').appendChild(hud);
-        this.hudPointerEl = hud;
-
-        // Add "Open Map" button to Status Tab
-        this.addMapButton();
-
-        // Initial Camera Position
+        // Center camera on ship initially
         this.centerCameraOnShip();
         
-        // Setup Input Controls
-        this.setupHoverInput();      // Tooltips
-        this.setupCameraControls();  // Pan/Zoom/Click
+        // Setup Hover effects (Tooltips)
+        this.setupHoverInput();
+        
+        // Setup Unified Pan/Zoom/Click Controls
+        this.setupCameraControls();
 
-        // Handle Window Resize
+        // Resize observer
         window.addEventListener('resize', () => {
             this.handleResize();
             this.scheduleUpdate();
         });
 
-        // Start Rendering Loop
+        // Start the RAF loop
         requestAnimationFrame(this._onAnimationFrame);
         
-        // Cleanup old DOM elements
+        // Cleanup leftovers
         Array.from(this.systemContainer.children).forEach(el => {
-            if (el.id === 'map-center-btn') return;
+            if (el.id == 'map-center-btn') return;
+            if (el.id == 'centerBtn') return;
             el.remove();
         });
+        this.systemPool.length = 0;
+        this.namePool.length = 0;
         this.activeSystems.clear();
     }
 
-    addMapButton() {
-        const statusTab = document.querySelector('.status-tab');
-        if (statusTab && !document.getElementById('btn-open-bigmap')) {
-            const btn = document.createElement('button');
-            btn.id = 'btn-open-bigmap';
-            btn.className = 'btn';
-            btn.style.width = '100%';
-            btn.style.margin = '15px 0';
-            btn.style.background = 'linear-gradient(90deg, #4a4a9a, #6a3a9a)';
-            btn.style.border = '1px solid #88f';
-            btn.style.fontWeight = 'bold';
-            btn.style.boxShadow = '0 0 10px rgba(100, 80, 255, 0.5)';
-            btn.innerHTML = '<i class="fas fa-map-marked-alt"></i> OPEN GALAXY MAP';
-            
-            btn.addEventListener('click', () => {
-                this.bigMap.open();
-            });
-
-            // Insert before controls if possible, else append
-            const controls = statusTab.querySelector('.mobile-controls');
-            if(controls) {
-                statusTab.insertBefore(btn, controls);
-            } else {
-                statusTab.appendChild(btn);
-            }
-        }
-    }
-
+    // Fix: Separated resize logic to ensure stars draw when tab becomes visible
     handleResize() {
         if (!this.galaxyCanvas) return;
+        
         const displayWidth = this.galaxyCanvas.clientWidth;
         const displayHeight = this.galaxyCanvas.clientHeight;
 
         if (this.galaxyCanvas.width !== displayWidth || this.galaxyCanvas.height !== displayHeight) {
             this.galaxyCanvas.width = displayWidth;
             this.galaxyCanvas.height = displayHeight;
+            this.drawBackground(); 
         }
     }
 
-    // --- MAIN RENDER LOOP ---
-    _onAnimationFrame(timestamp) {
-        // 1. Draw Parallax Background
-        if (this.galaxyCanvas) {
-            const ctx = this.galaxyCanvas.getContext('2d');
-            this.background.draw(
-                ctx, 
-                this.camera.x, 
-                this.camera.y, 
-                this.galaxyCanvas.width, 
-                this.galaxyCanvas.height,
-                timestamp
-            );
-        }
-
-        // 2. Update Ship DOM Position
-        this.updateShipPosition();
-
-        // 3. Update HUD Pointer Arrow
-        this.updateHudPointer();
-
-        requestAnimationFrame(this._onAnimationFrame);
-    }
-
-    updateHudPointer() {
-        if (!this.hudPointerEl || !this.gameState.targetSystem || !this.galaxyCanvas) {
-            if(this.hudPointerEl) this.hudPointerEl.style.display = 'none';
-            return;
-        }
-
-        const target = this.gameState.targetSystem;
-        const ship = this.gameState.ship;
-        const w = this.galaxyCanvas.width;
-        const h = this.galaxyCanvas.height;
-
-        // Calculate Angle
-        const dx = target.x - ship.x;
-        const dy = target.y - ship.y;
-        const angle = Math.atan2(dy, dx);
-
-        // Check Visibility on Screen
-        const screenX = (target.x - this.camera.x) * this.camera.zoom + w / 2;
-        const screenY = (target.y - this.camera.y) * this.camera.zoom + h / 2;
-        const padding = 40; // Distance from edge
-
-        const isOffScreen = 
-            screenX < padding || screenX > w - padding || 
-            screenY < padding || screenY > h - padding;
-
-        if (!isOffScreen) {
-            this.hudPointerEl.style.display = 'none';
-            return;
-        }
-
-        this.hudPointerEl.style.display = 'flex';
-
-        // Calculate Edge Intersection
-        const cx = w / 2;
-        const cy = h / 2;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        
-        // Project from center to screen edge
-        let tX = cos > 0 ? (w - padding * 2) / 2 : -(w - padding * 2) / 2;
-        let tY = tX * (sin / cos);
-        const verticalLimit = (h - padding * 2) / 2;
-        
-        // If Y intersection is out of bounds, clip to Top/Bottom
-        if (Math.abs(tY) > verticalLimit) {
-            tY = sin > 0 ? verticalLimit : -verticalLimit;
-            tX = tY * (cos / sin);
-        }
-
-        const finalX = cx + tX;
-        const finalY = cy + tY;
-
-        // Apply Styles
-        this.hudPointerEl.style.left = `${finalX}px`;
-        this.hudPointerEl.style.top = `${finalY}px`;
-        this.hudPointerEl.style.transform = `translate(-50%, -50%) rotate(${angle * (180/Math.PI)}deg)`;
-        
-        // Update Text
-        const dist = this.gameState.calculateDistance(this.gameState.currentSystem, target);
-        const info = this.hudPointerEl.querySelector('.hud-pointer-info');
-        info.textContent = `${Math.round(dist)} LY`;
-        // Counter-rotate text to keep it readable
-        info.style.transform = `rotate(-${angle * (180/Math.PI)}deg)`;
-    }
-
-    // --- POOLING SYSTEM (Performance optimization) ---
     _createPool(size) {
         for (let i = 0; i < size; i++) {
             const dot = document.createElement('div');
             dot.className = 'system-dot';
             dot.style.pointerEvents = 'auto';
+
             const name = document.createElement('div');
             name.className = 'system-name';
             name.style.pointerEvents = 'none';
+
             this.systemPool.push(dot);
             this.namePool.push(name);
         }
@@ -294,7 +142,6 @@ export class UI {
         const dot = this.systemPool.pop();
         const name = this.namePool.pop();
 
-        // Reset DOM nodes
         if (dot) {
             dot.dataset.id = '';
             dot.className = 'system-dot';
@@ -307,6 +154,7 @@ export class UI {
             if (name.parentNode) name.parentNode.removeChild(name);
             name.style.pointerEvents = 'none';
         }
+
         return { dot, name };
     }
 
@@ -321,19 +169,25 @@ export class UI {
         } catch (e) { }
 
         if (dot) {
+            dot.dataset.id = '';
             dot.className = 'system-dot';
-            dot.style = 'pointer-events: auto;'; // Reset inline styles
+            dot.style.backgroundColor = '';
+            dot.style.left = '';
+            dot.style.top = '';
+            dot.style.boxShadow = '';
+            dot.style.pointerEvents = 'auto';
             this.systemPool.push(dot);
         }
+
         if (name) {
-            name.className = 'system-name';
             name.textContent = '';
-            name.style = 'pointer-events: none;';
+            name.className = 'system-name';
+            name.style.left = '';
+            name.style.top = '';
             this.namePool.push(name);
         }
     }
 
-    // --- LOCAL MAP RENDERING ---
     _getVisibleWorldRect(margin = 80) {
         const w = this.galaxyCanvas.width;
         const h = this.galaxyCanvas.height;
@@ -356,6 +210,30 @@ export class UI {
         });
     }
 
+    _onAnimationFrame() {
+        this.updateShipPosition();
+        requestAnimationFrame(this._onAnimationFrame);
+    }
+
+    drawBackground() {
+        if (!this.galaxyCanvas) return;
+        const ctx = this.galaxyCanvas.getContext('2d');
+        ctx.clearRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
+        ctx.fillStyle = '#000033';
+        ctx.fillRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
+
+        ctx.fillStyle = '#ffffff';
+        const starCount = Math.min(900, Math.floor((this.galaxyCanvas.width * this.galaxyCanvas.height) / 2000));
+        for (let i = 0; i < starCount; i++) {
+            const x = Math.random() * this.galaxyCanvas.width;
+            const y = Math.random() * this.galaxyCanvas.height;
+            const size = Math.random() * 1.8;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
     _updateView() {
         if (!this.systemContainer || !this.galaxyCanvas) return;
 
@@ -363,16 +241,19 @@ export class UI {
         const activeSet = this.activeSystems;
         const sysMap = this.systemMap;
 
-        // 1. Cleanup out of view
         for (const [id, elements] of activeSet.entries()) {
             const sys = sysMap.get(id);
-            if (!sys || (sys.x < rect.left || sys.x > rect.right || sys.y < rect.top || sys.y > rect.bottom)) {
+            if (!sys) {
+                this._releaseElements(elements);
+                activeSet.delete(id);
+                continue;
+            }
+            if (sys.x < rect.left || sys.x > rect.right || sys.y < rect.top || sys.y > rect.bottom) {
                 this._releaseElements(elements);
                 activeSet.delete(id);
             }
         }
 
-        // 2. Add in view
         for (let i = 0, len = this.gameState.galaxy.length; i < len; i++) {
             const sys = this.gameState.galaxy[i];
             if (sys.x >= rect.left && sys.x <= rect.right && sys.y >= rect.top && sys.y <= rect.bottom) {
@@ -388,7 +269,6 @@ export class UI {
             }
         }
 
-        // 3. Render positions & styles
         for (const [id, elements] of activeSet.entries()) {
             const sys = sysMap.get(id);
             if (!sys) continue;
@@ -400,25 +280,18 @@ export class UI {
 
             dotEl.style.left = `${Math.round(screenX - 6)}px`;
             dotEl.style.top = `${Math.round(screenY - 6)}px`;
+
             nameEl.style.left = `${Math.round(screenX + 10)}px`;
             nameEl.style.top = `${Math.round(screenY - 25)}px`;
+            nameEl.textContent = sys.discovered ? sys.name : '???';
 
             const desiredColor = sys.discovered ? this._getEconomyColor(sys.economy) : '#666666';
-            if (dotEl.style.backgroundColor !== desiredColor) dotEl.style.backgroundColor = desiredColor;
-
-            // Selection & Target styles
-            const isTarget = sys === this.gameState.targetSystem;
-            const isCurrent = sys === this.gameState.currentSystem;
-
-            dotEl.classList.toggle('selected-system', isCurrent);
-            
-            if(isTarget) {
-                dotEl.style.boxShadow = '0 0 15px #ffff00, 0 0 25px #ffff00';
-                dotEl.style.zIndex = 100;
-            } else {
-                dotEl.style.boxShadow = '0 0 10px currentColor';
-                dotEl.style.zIndex = 2;
+            if (dotEl.style.backgroundColor !== desiredColor) {
+                dotEl.style.backgroundColor = desiredColor;
             }
+
+            dotEl.classList.toggle('selected-system', sys === this.gameState.currentSystem);
+            dotEl.style.boxShadow = (sys === this.gameState.targetSystem) ? '0 0 10px #ffcc66, 0 0 20px #ffcc66' : '0 0 10px currentColor';
         }
 
         this.updateShipPosition();
@@ -437,7 +310,6 @@ export class UI {
         }
     }
 
-    // --- CAMERA LOGIC ---
     centerCameraOnShip() {
         this.camera.x = this.gameState.ship.x;
         this.camera.y = this.gameState.ship.y;
@@ -465,8 +337,9 @@ export class UI {
         this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
     }
 
-    // --- INPUT & CONTROLS (Unified Touch/Mouse) ---
-    
+    // --- NEW UNIFIED INPUT SYSTEM ---
+
+    // 1. Hover effects only (Selection moved to Camera Controls)
     setupHoverInput() {
         this.systemContainer.addEventListener('pointermove', (e) => {
             const target = e.target.closest('.system-dot');
@@ -483,6 +356,7 @@ export class UI {
         this.systemContainer.addEventListener('pointerleave', () => this.hideSystemInfo());
     }
 
+    // 2. Helper for Selection
     selectSystem(systemId) {
         const system = this.systemMap.get(systemId);
         if (system && system !== this.gameState.currentSystem) {
@@ -493,6 +367,7 @@ export class UI {
         }
     }
 
+    // 3. Proximity Click Logic (The "Easy Click" Fix)
     handleProximityClick(clientX, clientY, radius) {
         const rect = this.galaxyCanvas.getBoundingClientRect();
         const clickX = clientX - rect.left;
@@ -501,7 +376,8 @@ export class UI {
         let closestDist = radius;
         let closestId = null;
 
-        for (const [id] of this.activeSystems) {
+        // Iterate currently visible systems
+        for (const [id, elements] of this.activeSystems) {
             const sys = this.systemMap.get(id);
             if (!sys) continue;
 
@@ -521,6 +397,7 @@ export class UI {
         }
     }
 
+    // 4. Unified Camera + Selection Controller
     setupCameraControls() {
         const container = document.querySelector('.map-container');
         if (!container || this.cameraControlsInitialized) return;
@@ -532,14 +409,19 @@ export class UI {
         let lastTouchDistance = 0;
         let totalDragDistance = 0;
 
-        // Handler for Tap
+        // Logic to decide if it was a click or a drag
         const handleTap = (clientX, clientY, target) => {
             if (isTraveling) return;
+
+            // Did we hit a specific dot?
             const dot = target.closest('.system-dot');
             if (dot) {
-                this.selectSystem(parseInt(dot.dataset.id, 10));
+                const systemId = parseInt(dot.dataset.id, 10);
+                this.selectSystem(systemId);
                 return;
             }
+
+            // Otherwise check proximity
             this.handleProximityClick(clientX, clientY, 45);
         };
 
@@ -564,16 +446,19 @@ export class UI {
             this.scheduleUpdate();
         });
 
-        container.addEventListener('mouseup', (e) => {
+        const endMouse = (e) => {
+            if (!isDragging) return;
             isDragging = false;
             container.style.cursor = 'grab';
             if (totalDragDistance < 10) {
                 handleTap(e.clientX, e.clientY, e.target);
             }
-        });
+        };
+
+        container.addEventListener('mouseup', endMouse);
         container.addEventListener('mouseleave', () => { isDragging = false; container.style.cursor = 'grab'; });
 
-        // --- TOUCH (Passive: False required for smooth pan/zoom) ---
+        // --- TOUCH (Passive: False) ---
         container.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 isDragging = true;
@@ -584,7 +469,7 @@ export class UI {
                 const dx = e.touches[0].clientX - e.touches[1].clientX;
                 const dy = e.touches[0].clientY - e.touches[1].clientY;
                 lastTouchDistance = Math.sqrt(dx * dx + dy * dy);
-                isDragging = false;
+                isDragging = false; 
             }
         }, { passive: false });
 
@@ -636,304 +521,353 @@ export class UI {
         // Center Button
         const existingBtn = document.querySelector('.map-center-btn');
         if (existingBtn) existingBtn.remove();
+
         const centerBtn = document.createElement('div');
         centerBtn.className = 'map-center-btn';
         centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
         centerBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.centerCameraOnShip();
+            const startX = this.camera.x;
+            const startY = this.camera.y;
+            const startTime = Date.now();
+            const duration = 500;
+            
+            const animateCenter = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easedProgress = easeInOutCubic(progress);
+                this.camera.x = startX + (this.gameState.ship.x - startX) * easedProgress;
+                this.camera.y = startY + (this.gameState.ship.y - startY) * easedProgress;
+                this.scheduleUpdate();
+                if (progress < 1) requestAnimationFrame(animateCenter);
+            };
+            animateCenter();
         });
         container.appendChild(centerBtn);
     }
 
-    // --- APP EVENT LISTENERS ---
-    setupAppEventListeners() {
-        // Travel Button
-        const travelBtn = document.getElementById('travel-btn');
-        if (travelBtn) travelBtn.addEventListener('click', () => {
-            if (isTraveling) { this.showNotification("Already traveling!"); return; }
-            if (!this.gameState.targetSystem) { this.showNotification("Select a system!"); return; }
-            
-            const result = this.gameState.travelToSystem();
-            if (!result.success) { this.showNotification(result.message); return; }
-            
-            isTraveling = true;
-            document.querySelectorAll('button').forEach(btn => btn.disabled = true);
-            document.querySelector('.ui-panel').classList.add('traveling');
-            this.showNotification(result.message);
-            
-            const startTime = Date.now();
-            const travelDuration = 2000 * this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
-            
-            const animateTravel = () => {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / travelDuration, 1);
-                const easedProgress = easeInOutCubic(progress);
-                this.gameState.ship.travelProgress = easedProgress;
-                
-                if (this.shipIndicatorEl) {
-                    const startSys = this.gameState.currentSystem;
-                    const endSys = this.gameState.targetSystem;
-                    this.gameState.ship.x = startSys.x + (endSys.x - startSys.x) * easedProgress;
-                    this.gameState.ship.y = startSys.y + (endSys.y - startSys.y) * easedProgress;
-                    this.updateShipPosition();
-                    this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
-                }
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateTravel);
-                } else {
-                    isTraveling = false;
-                    document.querySelectorAll('button').forEach(btn => btn.disabled = false);
-                    document.querySelector('.ui-panel').classList.remove('traveling');
-                    const result = this.gameState.completeTravel();
-                    this.showNotification(result.message);
-                    
-                    if (!this.gameState.currentSystem.discovered) {
-                        this.gameState.currentSystem.discovered = true;
-                        this.scheduleUpdate();
-                    }
-
-                    // Random Encounters
-                    let pirateChance = 0.4;
-                    if (this.gameState.currentSystem.security === 'low') pirateChance = 0.5;
-                    else if (this.gameState.currentSystem.security === 'high') pirateChance = 0.3;
-                    
-                    if (Math.random() < pirateChance) {
-                        const encounter = this.encounterManager.getRandomEncounter();
-                        this.encounterManager.startEncounter(encounter.type);
-                    }
-                    
-                    this.updateUI();
-                }
-            };
-            animateTravel();
-        });
-
-        // Other Buttons via Delegation
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'refuel-btn') {
-                const result = this.gameState.refuelShip();
-                this.showNotification(result.message);
-                this.updateUI();
-            }
-            
-            if (e.target.classList.contains('contract-button')) {
-                const result = this.gameState.handleContract(e.target.dataset.contract);
-                this.showNotification(result.message);
-                this.updateUI();
-            }
-            
-            if (e.target.classList.contains('combat-btn')) {
-                const action = e.target.dataset.action;
-                if (action) this.encounterManager.handleEncounterAction(action);
-            }
-            
-            if (e.target.dataset.good) {
-                const result = this.gameState.tradeItem(e.target.dataset.good, e.target.dataset.action);
-                this.showNotification(result.message);
-                this.updateUI();
-            }
-            
-            if (e.target.dataset.upgrade) {
-                const result = this.gameState.upgradeShip(e.target.dataset.upgrade);
-                this.showNotification(result.message);
-                this.updateUI();
-            }
-        });
-        
-        // Tabs
-        const tabs = document.querySelectorAll('.tab');
-        if (tabs && tabs.length > 0) {
-            tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    document.querySelectorAll('.panel-section').forEach(section => section.style.display = 'none');
-                    const tabName = tab.dataset.tab;
-                    const activeTab = document.querySelector(`.${tabName}-tab`);
-                    if (activeTab) activeTab.style.display = 'block';
-                });
-            });
-        }
-    }
-
-    // --- UI HELPERS ---
+    // UI update
     updateUI() {
-        // Only update elements if they exist
-        const el = (id) => document.getElementById(id);
+        const creditsEl = document.getElementById('credits');
+        const fuelEl = document.getElementById('fuel');
+        const hullEl = document.getElementById('hull');
+        const cargoSpaceEl = document.getElementById('cargo-space');
+        const targetSystemEl = document.getElementById('target-system');
+        const distanceEl = document.getElementById('distance');
+        const fuelCostEl = document.getElementById('fuel-cost');
         
-        if (el('credits')) el('credits').textContent = this.gameState.credits.toLocaleString() + ' CR';
-        if (el('fuel')) el('fuel').textContent = `${Math.round(this.gameState.fuel)}/${this.gameState.maxFuel}`;
-        if (el('hull')) el('hull').textContent = this.gameState.ship.hull + '%';
+        if (creditsEl) creditsEl.textContent = this.gameState.credits.toLocaleString() + ' CR';
+        if (fuelEl) fuelEl.textContent = `${Math.round(this.gameState.fuel)}/${this.gameState.maxFuel}`;
+        if (hullEl) hullEl.textContent = this.gameState.ship.hull + '%';
         
         const cargoSpace = this.gameState.cargo.reduce((sum, item) => sum + item.quantity, 0);
-        if (el('cargo-space')) el('cargo-space').textContent = `${cargoSpace}/${this.gameState.cargoCapacity}`;
+        if (cargoSpaceEl) cargoSpaceEl.textContent = `${cargoSpace}/${this.gameState.cargoCapacity}`;
         
         if (this.gameState.targetSystem) {
-            if (el('target-system')) el('target-system').textContent = this.gameState.targetSystem.discovered ? 
+            if (targetSystemEl) targetSystemEl.textContent = this.gameState.targetSystem.discovered ? 
                 this.gameState.targetSystem.name : 'Unknown System';
             const distance = this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
-            if (el('distance')) el('distance').textContent = Math.round(distance * 10) / 10 + ' LY';
-            if (el('fuel-cost')) el('fuel-cost').textContent = Math.ceil(distance);
+            if (distanceEl) distanceEl.textContent = Math.round(distance * 10) / 10 + ' LY';
+            const fuelCost = Math.ceil(distance);
+            if (fuelCostEl) fuelCostEl.textContent = fuelCost;
         } else {
-            if (el('target-system')) el('target-system').textContent = 'None';
-            if (el('distance')) el('distance').textContent = '0 LY';
-            if (el('fuel-cost')) el('fuel-cost').textContent = '0';
+            if (targetSystemEl) targetSystemEl.textContent = 'None';
+            if (distanceEl) distanceEl.textContent = '0 LY';
+            if (fuelCostEl) fuelCostEl.textContent = '0';
         }
         
-        this.updateMarketUI();
-        this.updateCargoUI();
-        this.updateContractsList();
-        this.updateSystemOverview();
+        const marketContainer = document.querySelector('.market-grid');
+        if (marketContainer && this.gameState.currentSystem) {
+            if (!this.gameState.currentSystem.hasMarket) {
+                marketContainer.innerHTML = '<div class="no-market-message">Market not available in this system</div>';
+            } else {
+                marketContainer.innerHTML = `
+                    <div class="market-header">COMMODITY</div>
+                    <div class="market-header">BUY</div>
+                    <div class="market-header">SELL</div>
+                    <div class="market-header">STOCK</div>
+                    <div class="market-header">ACTIONS</div>
+                `;
+                
+                this.gameState.goods.forEach(good => {
+                    const marketItem = this.gameState.currentSystem.market[good.id];
+                    if (!marketItem) return;
         
-        // Scan Button Logic
-        const statusTab = document.querySelector('.status-tab');
-        if (statusTab && this.gameState.ship.radar > 0 && !document.getElementById('scan-btn')) {
+                    const marketElement = document.createElement('div');
+                    marketElement.className = 'market-item';
+                    
+                    const illegalIndicator = marketItem.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
+                    const stockIndicator = marketItem.quantity > 0 ? 
+                        `<span style="color: #66ff99;">${marketItem.quantity}</span>` : 
+                        `<span style="color: #ff6666;">0</span>`;
+                    
+                    marketElement.innerHTML = `
+                        <span>${illegalIndicator}${marketItem.name}</span>
+                        <span>${marketItem.buyPrice} CR</span>
+                        <span>${marketItem.sellPrice} CR</span>
+                        <span>${stockIndicator}</span>
+                        <div style="display: flex; gap: 5px; justify-content: center;">
+                            <button class="btn btn-buy" data-good="${good.id}" data-action="buy" ${marketItem.quantity <= 0 ? 'disabled' : ''}>BUY</button>
+                            <button class="btn btn-sell" data-good="${good.id}" data-action="sell">SELL</button>
+                        </div>
+                    `;
+                    marketContainer.appendChild(marketElement);
+                });
+            }
+        }
+        
+        const cargoContainer = document.getElementById('cargo-hold');
+        if (cargoContainer) {
+            cargoContainer.innerHTML = '';
+            if (this.gameState.cargo.length === 0) {
+                const emptyItem = document.createElement('div');
+                emptyItem.className = 'cargo-item';
+                emptyItem.innerHTML = '<span style="grid-column: 1 / span 3; text-align: center; color: #8888ff;">Cargo hold is empty</span>';
+                cargoContainer.appendChild(emptyItem);
+            } else {
+                this.gameState.cargo.forEach(item => {
+                    const cargoItem = document.createElement('div');
+                    cargoItem.className = 'cargo-item';
+                    const illegalIndicator = item.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
+                    const marketItem = this.gameState.currentSystem.market?.[item.id];
+                    const canSell = this.gameState.currentSystem.hasMarket && marketItem;
+                    
+                    cargoItem.innerHTML = `
+                        <span>${illegalIndicator}${item.name}</span>
+                        <span>${item.quantity}</span>
+                        <button class="btn btn-sell" 
+                                data-good="${item.id}" 
+                                data-action="sell-one" 
+                                ${canSell ? '' : 'disabled'}>
+                            SELL
+                        </button>
+                    `;
+                    cargoContainer.appendChild(cargoItem);
+                });
+            }
+        }
+        
+        const shipyardContainer = document.getElementById('ship-upgrades');
+        if (shipyardContainer) {
+            shipyardContainer.innerHTML = '';
+            const shipyardStatusEl = document.getElementById('shipyard-status');
+            if (shipyardStatusEl) {
+                if (this.gameState.currentSystem && this.gameState.currentSystem.hasShipyard) {
+                    shipyardStatusEl.textContent = 'Available upgrades:';
+                    this.gameState.upgrades.forEach(upgrade => {
+                        const upgradeCard = document.createElement('div');
+                        upgradeCard.className = 'upgrade-card';
+                        upgradeCard.innerHTML = `
+                            <div class="upgrade-header">
+                                <i class="${upgrade.icon}"></i>
+                                <h3 style="font-size: 16px;">${upgrade.name}</h3>
+                            </div>
+                            <p style="font-size: 14px; margin: 5px 0;">${upgrade.description}</p>
+                            <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+                                <span style="font-size: 14px;">Cost: ${upgrade.cost} CR</span>
+                                <button class="btn btn-buy" data-upgrade="${upgrade.id}">UPGRADE</button>
+                            </div>
+                        `;
+                        shipyardContainer.appendChild(upgradeCard);
+                    });
+                } else {
+                    shipyardStatusEl.textContent = 'Shipyard services not available in this system';
+                }
+            }
+        }
+        
+        if (this.gameState.ship.radar > 0) {
             const scanButton = document.createElement('button');
             scanButton.id = 'scan-btn';
             scanButton.className = 'btn mobile-btn';
             scanButton.innerHTML = '<i class="fas fa-satellite"></i> SCAN SYSTEMS';
             scanButton.style.marginTop = '10px';
             scanButton.style.width = '100%';
-            
-            const controls = statusTab.querySelector('.mobile-controls');
-            if(controls) statusTab.insertBefore(scanButton, controls);
-            else statusTab.appendChild(scanButton);
 
-            scanButton.addEventListener('click', () => {
-                const result = this.gameState.scanNearbySystems();
+            if (this.gameState.ship.radar === 0) {
+                scanButton.disabled = true;
+                scanButton.style.opacity = '0.6';
+            }
+
+            const statusTab = document.querySelector('.status-tab');
+            if (statusTab) {
+                const existingBtn = document.getElementById('scan-btn');
+                if (existingBtn) existingBtn.remove();
+                statusTab.appendChild(scanButton);
+                scanButton.addEventListener('click', () => {
+                    const result = this.gameState.scanNearbySystems();
+                    if (this.gameState.ship.radar === 0) {
+                        this.showNotification("You need radar to scan systems!");
+                        return;
+                    }
+                    if (result.success) {
+                        this.showNotification(result.message);
+                        this.scheduleUpdate();
+                        this.updateUI();
+                    } else {
+                        this.showNotification(result.message);
+                    }
+                });
+            }
+        }
+        
+        this.updateSystemOverview();
+        this.updateContractsList();
+        
+        document.querySelectorAll('[data-good]').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const goodId = e.target.dataset.good;
+                const action = e.target.dataset.action;
+                const result = this.gameState.tradeItem(goodId, action);
                 this.showNotification(result.message);
-                if (result.success) {
-                    this.scheduleUpdate();
-                    this.updateUI();
-                }
+                this.updateUI();
             });
-        }
-    }
-
-    updateMarketUI() {
-        const marketContainer = document.querySelector('.market-grid');
-        if (!marketContainer || !this.gameState.currentSystem) return;
-        
-        if (!this.gameState.currentSystem.hasMarket) {
-            marketContainer.innerHTML = '<div class="no-market-message">Market not available in this system</div>';
-            return;
-        }
-        
-        marketContainer.innerHTML = `
-            <div class="market-header">COMMODITY</div>
-            <div class="market-header">BUY</div>
-            <div class="market-header">SELL</div>
-            <div class="market-header">STOCK</div>
-            <div class="market-header">ACTIONS</div>
-        `;
-        
-        this.gameState.goods.forEach(good => {
-            const marketItem = this.gameState.currentSystem.market[good.id];
-            if (!marketItem) return;
-            const marketElement = document.createElement('div');
-            marketElement.className = 'market-item';
-            const illegalIndicator = marketItem.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
-            const stockIndicator = marketItem.quantity > 0 ? 
-                `<span style="color: #66ff99;">${marketItem.quantity}</span>` : 
-                `<span style="color: #ff6666;">0</span>`;
-            marketElement.innerHTML = `
-                <span>${illegalIndicator}${marketItem.name}</span>
-                <span>${marketItem.buyPrice} CR</span>
-                <span>${marketItem.sellPrice} CR</span>
-                <span>${stockIndicator}</span>
-                <div style="display: flex; gap: 5px; justify-content: center;">
-                    <button class="btn btn-buy" data-good="${good.id}" data-action="buy" ${marketItem.quantity <= 0 ? 'disabled' : ''}>BUY</button>
-                    <button class="btn btn-sell" data-good="${good.id}" data-action="sell">SELL</button>
-                </div>
-            `;
-            marketContainer.appendChild(marketElement);
         });
-    }
-
-    updateCargoUI() {
-        const cargoContainer = document.getElementById('cargo-hold');
-        if (!cargoContainer) return;
-        cargoContainer.innerHTML = '';
         
-        if (this.gameState.cargo.length === 0) {
-            const emptyItem = document.createElement('div');
-            emptyItem.className = 'cargo-item';
-            emptyItem.innerHTML = '<span style="grid-column: 1 / span 3; text-align: center; color: #8888ff;">Cargo hold is empty</span>';
-            cargoContainer.appendChild(emptyItem);
-        } else {
-            this.gameState.cargo.forEach(item => {
-                const cargoItem = document.createElement('div');
-                cargoItem.className = 'cargo-item';
-                const illegalIndicator = item.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
-                const marketItem = this.gameState.currentSystem.market?.[item.id];
-                const canSell = this.gameState.currentSystem.hasMarket && marketItem;
-                cargoItem.innerHTML = `
-                    <span>${illegalIndicator}${item.name}</span>
-                    <span>${item.quantity}</span>
-                    <button class="btn btn-sell" data-good="${item.id}" data-action="sell-one" ${canSell ? '' : 'disabled'}>SELL</button>
-                `;
-                cargoContainer.appendChild(cargoItem);
+        document.querySelectorAll('[data-upgrade]').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const upgradeId = e.target.dataset.upgrade;
+                const result = this.gameState.upgradeShip(upgradeId);
+                this.showNotification(result.message);
+                this.updateUI();
             });
-        }
+        });
+        
+        this.scheduleUpdate();
     }
 
     updateSystemOverview() {
-        // ... (Existing system overview logic)
-        // Using abbreviated logic here to fit response, assumes standard DOM structure
-        if(this.gameState.currentSystem) {
-           const sys = this.gameState.currentSystem;
-           const els = { 
-               name: document.getElementById('current-system-name'),
-               eco: document.getElementById('current-system-economy'),
-               sec: document.getElementById('current-system-security')
-           };
-           if(els.name) els.name.textContent = sys.name;
-           if(els.eco) els.eco.textContent = `Economy: ${sys.economy}`;
-           if(els.sec) els.sec.textContent = `Security: ${sys.security}`;
-        }
-        
+        const currentSystemName = document.getElementById('current-system-name');
+        const currentSystemEconomy = document.getElementById('current-system-economy');
+        const currentSystemSecurity = document.getElementById('current-system-security');
+        const overviewFuel = document.getElementById('overview-fuel');
+        const overviewRefuelCost = document.getElementById('overview-refuel-cost');
+        const overviewCargo = document.getElementById('overview-cargo');
+        const overviewCargoValue = document.getElementById('overview-cargo-value');
+        const overviewThreat = document.getElementById('overview-threat');
+        const overviewPirateChance = document.getElementById('overview-pirate-chance');
         const nearbySystems = document.getElementById('nearby-systems');
-        if (nearbySystems && this.gameState.currentSystem) {
-            nearbySystems.innerHTML = '';
-            const nearby = this.gameState.galaxy.filter(s => {
-                if (s === this.gameState.currentSystem) return false;
-                const d = this.gameState.calculateDistance(this.gameState.currentSystem, s);
-                return d <= 50 && s.discovered;
-            }).sort((a, b) => {
-                const dA = this.gameState.calculateDistance(this.gameState.currentSystem, a);
-                const dB = this.gameState.calculateDistance(this.gameState.currentSystem, b);
-                return dA - dB;
-            });
+        
+        if (this.gameState.currentSystem) {
+            if (currentSystemName) currentSystemName.textContent = this.gameState.currentSystem.name;
+            if (currentSystemEconomy) currentSystemEconomy.textContent = `Economy: ${this.gameState.currentSystem.economy.charAt(0).toUpperCase() + this.gameState.currentSystem.economy.slice(1)}`;
+            if (currentSystemSecurity) currentSystemSecurity.textContent = `Security: ${this.gameState.currentSystem.security.charAt(0).toUpperCase() + this.gameState.currentSystem.security.slice(1)}`;
             
-            nearby.slice(0, 5).forEach(s => {
-                const d = this.gameState.calculateDistance(this.gameState.currentSystem, s);
-                const el = document.createElement('div');
-                el.className = 'system-overview-item';
-                el.innerHTML = `<div><strong>${s.name}</strong></div><div>${Math.round(d)} LY</div>`;
-                nearbySystems.appendChild(el);
-            });
+            if (overviewFuel) overviewFuel.textContent = `${this.gameState.fuel}/${this.gameState.maxFuel} units`;
+            
+            let costPerUnit = 0;
+            let fuelNeeded = 0;
+            let totalCost = 0;
+            
+            if (this.gameState.currentSystem.hasRefuel) {
+                switch(this.gameState.currentSystem.techLevel) {
+                    case 'high': costPerUnit = 10; break;
+                    case 'medium': costPerUnit = 15; break;
+                    case 'low': costPerUnit = 20; break;
+                    default: costPerUnit = 15;
+                }
+                fuelNeeded = this.gameState.maxFuel - this.gameState.fuel;
+                totalCost = fuelNeeded * costPerUnit;
+            }
+            
+            if (overviewRefuelCost) {
+                overviewRefuelCost.textContent = this.gameState.currentSystem.hasRefuel ? 
+                    `Refuel cost: ${totalCost} CR` : 
+                    'Refuel not available';
+            }
+            
+            const cargoSpace = this.gameState.cargo.reduce((sum, item) => sum + item.quantity, 0);
+            let cargoValue = 0;
+            
+            if (this.gameState.currentSystem.hasMarket) {
+                this.gameState.cargo.forEach(item => {
+                    const marketItem = this.gameState.currentSystem.market?.[item.id];
+                    if (marketItem) {
+                        cargoValue += marketItem.sellPrice * item.quantity;
+                    }
+                });
+            }
+            
+            if (overviewCargo) overviewCargo.textContent = `${cargoSpace}/${this.gameState.cargoCapacity} units`;
+            if (overviewCargoValue) {
+                overviewCargoValue.textContent = this.gameState.currentSystem.hasMarket ? 
+                    `Value: ${cargoValue.toLocaleString()} CR` : 
+                    'Market not available';
+            }
+            
+            let threatLevel = "Low";
+            let pirateChance = 0.4;
+            if (this.gameState.currentSystem.security === 'low') {
+                threatLevel = "High";
+                pirateChance = 0.5;
+            } else if (this.gameState.currentSystem.security === 'medium') {
+                threatLevel = "Medium";
+                pirateChance = 0.4;
+            } else {
+                threatLevel = "Low";
+                pirateChance = 0.3;
+            }
+            if (overviewThreat) overviewThreat.textContent = threatLevel;
+            if (overviewPirateChance) overviewPirateChance.textContent = `${Math.round(pirateChance * 100)}%`;
+            
+            if (nearbySystems) {
+                nearbySystems.innerHTML = '';
+                const nearby = this.gameState.galaxy.filter(system => {
+                    if (system === this.gameState.currentSystem) return false;
+                    const distance = this.gameState.calculateDistance(this.gameState.currentSystem, system);
+                    return distance <= 50 && system.discovered;
+                });
+                
+                nearby.sort((a, b) => {
+                    const distA = this.gameState.calculateDistance(this.gameState.currentSystem, a);
+                    const distB = this.gameState.calculateDistance(this.gameState.currentSystem, b);
+                    return distA - distB;
+                });
+                
+                nearby.slice(0, 5).forEach(system => {
+                    const distance = this.gameState.calculateDistance(this.gameState.currentSystem, system);
+                    const systemEl = document.createElement('div');
+                    systemEl.className = 'system-overview-item';
+                    systemEl.innerHTML = `
+                        <div><strong>${system.name}</strong></div>
+                        <div>${Math.round(distance)} LY</div>
+                        <div>${system.economy.charAt(0).toUpperCase() + system.economy.slice(1)}</div>
+                        <div>Security: ${system.security.charAt(0).toUpperCase() + system.security.slice(1)}</div>
+                    `;
+                    nearbySystems.appendChild(systemEl);
+                });
+                
+                if (nearby.length === 0) {
+                    nearbySystems.innerHTML = '<div style="text-align: center; padding: 10px; color: #8888ff;">No discovered systems nearby</div>';
+                }
+            }
         }
     }
 
     updateContractsList() {
         const contractsList = document.getElementById('contracts-list');
         if (!contractsList) return;
+        
         contractsList.innerHTML = '';
+        
         if (this.gameState.contracts.length === 0) {
             contractsList.innerHTML = '<div style="text-align: center; padding: 10px; color: #8888ff;">No contracts available</div>';
             return;
         }
+        
         this.gameState.contracts.forEach(contract => {
             if (contract.completed) return;
+            
             const contractEl = document.createElement('div');
             contractEl.className = 'contract-item';
+            
             let buttonText = "Accept";
-            if (contract.type === 'delivery') {
-                if(contract.originSystem === this.gameState.currentSystem) buttonText = "Pick Up";
-                else if(contract.targetSystem === this.gameState.currentSystem) buttonText = "Deliver";
+            if (contract.type === 'delivery' && contract.originSystem === this.gameState.currentSystem) {
+                buttonText = "Pick Up";
+            } else if (contract.type === 'delivery' && contract.targetSystem === this.gameState.currentSystem) {
+                buttonText = "Deliver";
             }
+            
             contractEl.innerHTML = `
                 <div class="contract-header">
                     <h3>${contract.name}</h3>
@@ -949,9 +883,11 @@ export class UI {
     showNotification(message) {
         const notification = document.getElementById('notification');
         if (!notification) return;
+        
         notification.textContent = message;
         notification.style.opacity = '1';
         notification.style.transform = 'translateX(-50%) translateY(0)';
+        
         setTimeout(() => {
             notification.style.opacity = '0';
             notification.style.transform = 'translateX(-50%) translateY(-20px)';
@@ -961,17 +897,46 @@ export class UI {
     showSystemInfo(system, clientX, clientY) {
         const panel = document.getElementById('system-info-panel');
         if (!panel) return;
+
         const screenX = (system.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
         const screenY = (system.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
         
-        let content = `<h3>${system.discovered ? system.name : 'Unknown System'}</h3>`;
-        if(system.discovered) {
-            content += `<div class="stat"><span>Economy:</span><span class="stat-value">${system.economy}</span></div>`;
-            content += `<div class="stat"><span>Security:</span><span class="stat-value">${system.security}</span></div>`;
+        if (!system.discovered) {
+            panel.innerHTML = `
+                <h3>Unknown System</h3>
+                <div class="stat">
+                    <span>Status:</span>
+                    <span class="stat-value">Undiscovered</span>
+                </div>
+            `;
         } else {
-            content += `<div class="stat"><span>Status:</span><span class="stat-value">Undiscovered</span></div>`;
+            const services = [];
+            if (system.hasShipyard) services.push('Shipyard');
+            if (system.hasRefuel) services.push('Refuel');
+            if (system.hasMarket) services.push('Market');
+            if (system.hasSpecial) services.push('Special');
+            
+            panel.innerHTML = `
+                <h3>${system.name}</h3>
+                <div class="stat">
+                    <span>Economy:</span>
+                    <span class="stat-value">${system.economy.charAt(0).toUpperCase() + system.economy.slice(1)}</span>
+                </div>
+                <div class="stat">
+                    <span>Tech Level:</span>
+                    <span class="stat-value">${system.techLevel.charAt(0).toUpperCase() + system.techLevel.slice(1)}</span>
+                </div>
+                <div class="stat">
+                    <span>Security:</span>
+                    <span class="stat-value">${system.security.charAt(0).toUpperCase() + system.security.slice(1)}</span>
+                </div>
+                <div class="stat">
+                    <span>Services:</span>
+                    <span class="stat-value">${services.join(', ') || 'None'}</span>
+                </div>
+            `;
         }
-        panel.innerHTML = content;
+        
         panel.style.left = `${screenX + 10}px`;
         panel.style.top = `${screenY}px`;
         panel.style.opacity = '1';
@@ -980,5 +945,131 @@ export class UI {
     hideSystemInfo() {
         const panel = document.getElementById('system-info-panel');
         if (panel) panel.style.opacity = '0';
+    }
+
+    setupAppEventListeners() {
+        const travelBtn = document.getElementById('travel-btn');
+        if (travelBtn) travelBtn.addEventListener('click', () => {
+            if (isTraveling) {
+                this.showNotification("Already traveling!");
+                return;
+            }
+
+            if (!this.gameState.targetSystem) {
+                this.showNotification("Select a system to travel to!");
+                return;
+            }
+
+            const result = this.gameState.travelToSystem();
+            if (!result.success) {
+                this.showNotification(result.message);
+                return;
+            }
+            
+            isTraveling = true;
+            document.querySelectorAll('button').forEach(btn => {
+                btn.disabled = true;
+            });
+            document.querySelector('.ui-panel').classList.add('traveling');
+
+            this.showNotification(result.message);
+            
+            const startTime = Date.now();
+            const travelDuration = 2000 * this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
+            
+            const animateTravel = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / travelDuration, 1);
+                const easedProgress = easeInOutCubic(progress);
+                this.gameState.ship.travelProgress = easedProgress;
+                
+                if (this.shipIndicatorEl) {
+                    this.gameState.ship.x = this.gameState.currentSystem.x + (this.gameState.targetSystem.x - this.gameState.currentSystem.x) * easedProgress;
+                    this.gameState.ship.y = this.gameState.currentSystem.y + (this.gameState.targetSystem.y - this.gameState.currentSystem.y) * easedProgress;
+                    
+                    this.updateShipPosition();
+                    this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
+                }
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animateTravel);
+                } else {
+                    isTraveling = false;
+                    document.querySelectorAll('button').forEach(btn => {
+                        btn.disabled = false;
+                    });
+                    document.querySelector('.ui-panel').classList.remove('traveling');
+                    
+                    const result = this.gameState.completeTravel();
+                    this.showNotification(result.message);
+                    
+                    if (!this.gameState.currentSystem.discovered) {
+                        this.gameState.currentSystem.discovered = true;
+                        this.scheduleUpdate();
+                    }
+                    
+                    let pirateChance = 0.4;
+                    if (this.gameState.currentSystem.security === 'low') pirateChance = 0.5;
+                    else if (this.gameState.currentSystem.security === 'high') pirateChance = 0.3;
+                    
+                    if (Math.random() < pirateChance) {
+                        const encounter = this.encounterManager.getRandomEncounter();
+                        this.encounterManager.startEncounter(encounter.type);
+                    }
+                    
+                    this.updateUI();
+                }
+            };
+            
+            animateTravel();
+        });
+        
+        const refuelBtn = document.getElementById('refuel-btn');
+        if (refuelBtn) refuelBtn.addEventListener('click', () => {
+            if (!this.gameState.currentSystem.hasRefuel) {
+                this.showNotification("Refuel services not available!");
+                return;
+            }
+            
+            const result = this.gameState.refuelShip();
+            this.showNotification(result.message);
+            this.updateUI();
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('contract-button')) {
+                const contractId = e.target.dataset.contract;
+                const result = this.gameState.handleContract(contractId);
+                this.showNotification(result.message);
+                this.updateUI();
+            }
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('combat-btn')) {
+                const action = e.target.dataset.action;
+                if (action) {
+                    this.encounterManager.handleEncounterAction(action);
+                }
+            }
+        });
+        
+        const tabs = document.querySelectorAll('.tab');
+        if (tabs && tabs.length > 0) {
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    
+                    document.querySelectorAll('.panel-section').forEach(section => {
+                        section.style.display = 'none';
+                    });
+                    
+                    const tabName = tab.dataset.tab;
+                    const activeTab = document.querySelector(`.${tabName}-tab`);
+                    if (activeTab) activeTab.style.display = 'block';
+                });
+            });
+        }
     }
 }
