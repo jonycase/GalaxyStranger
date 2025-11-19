@@ -105,6 +105,10 @@ h1 {
     width: 100%;
     height: 100%;
     display: block;
+    
+        /* ADD THIS: Critical for mobile gestures */
+    touch-action: none; 
+    background-color: #000033; /* Fallback color */
 }
 
 #system-container, #ship-container {
