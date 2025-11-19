@@ -985,57 +985,55 @@ export class UI {
         }, 3000);
     }
 
-    showSystemInfo(system, clientX, clientY) {
-        const panel = document.getElementById('system-info-panel');
-        if (!panel) return;
-
-        const screenX = (system.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
-        const screenY = (system.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
+    // Find the showSystemInfo method and replace it with this:
+    showSystemInfo(system) {
+        const pointer = document.getElementById('hover-pointer');
+        const content = pointer ? pointer.querySelector('.hover-details') : null;
         
+        if (!pointer || !content || !this.galaxyCanvas) return;
+
+        // 1. Calculate Screen Position (Snapping to Star, not Mouse)
+        const w = this.galaxyCanvas.clientWidth;
+        const h = this.galaxyCanvas.clientHeight;
+        const cx = w / 2;
+        const cy = h / 2;
+
+        // World -> Screen projection
+        const screenX = (system.x - this.camera.x) * this.camera.zoom + cx;
+        const screenY = (system.y - this.camera.y) * this.camera.zoom + cy;
+
+        // 2. Build Content
         if (!system.discovered) {
-            panel.innerHTML = `
-                <h3>Unknown System</h3>
-                <div class="stat">
-                    <span>Status:</span>
-                    <span class="stat-value">Undiscovered</span>
-                </div>
+            content.innerHTML = `
+                <div style="color: #ffcc66; font-weight:bold; border-bottom:1px solid #555; padding-bottom:2px; margin-bottom:2px;">Unknown System</div>
+                <div style="color: #aaa; font-style:italic;">Undiscovered</div>
             `;
         } else {
             const services = [];
-            if (system.hasShipyard) services.push('Shipyard');
-            if (system.hasRefuel) services.push('Refuel');
-            if (system.hasMarket) services.push('Market');
-            if (system.hasSpecial) services.push('Special');
+            if (system.hasShipyard) services.push('<i class="fas fa-wrench"></i>');
+            if (system.hasRefuel) services.push('<i class="fas fa-gas-pump"></i>');
+            if (system.hasMarket) services.push('<i class="fas fa-shopping-cart"></i>');
             
-            panel.innerHTML = `
-                <h3>${system.name}</h3>
-                <div class="stat">
-                    <span>Economy:</span>
-                    <span class="stat-value">${system.economy.charAt(0).toUpperCase() + system.economy.slice(1)}</span>
-                </div>
-                <div class="stat">
-                    <span>Tech Level:</span>
-                    <span class="stat-value">${system.techLevel.charAt(0).toUpperCase() + system.techLevel.slice(1)}</span>
-                </div>
-                <div class="stat">
-                    <span>Security:</span>
-                    <span class="stat-value">${system.security.charAt(0).toUpperCase() + system.security.slice(1)}</span>
-                </div>
-                <div class="stat">
-                    <span>Services:</span>
-                    <span class="stat-value">${services.join(', ') || 'None'}</span>
-                </div>
+            content.innerHTML = `
+                <div style="color: #66ccff; font-weight:bold; border-bottom:1px solid #446688; padding-bottom:3px; margin-bottom:3px;">${system.name}</div>
+                <div class="hover-row"><span class="hover-label">Economy:</span> <span class="hover-val" style="color:${this._getEconomyColor(system.economy)}">${system.economy}</span></div>
+                <div class="hover-row"><span class="hover-label">Security:</span> <span class="hover-val">${system.security}</span></div>
+                <div class="hover-row"><span class="hover-label">Tech:</span> <span class="hover-val">${system.techLevel}</span></div>
+                <div class="hover-row" style="margin-top:2px;"><span class="hover-label">Services:</span> <span class="hover-val">${services.join(' ') || '-'}</span></div>
             `;
         }
-        
-        panel.style.left = `${screenX + 10}px`;
-        panel.style.top = `${screenY}px`;
-        panel.style.opacity = '1';
+
+        // 3. Position the Pointer
+        pointer.style.display = 'flex';
+        pointer.style.left = `${screenX}px`;
+        // Position slightly above the star (radius approx 6px + padding)
+        pointer.style.top = `${screenY - 20}px`; 
+        pointer.style.transform = 'translate(-50%, -100%)'; // Anchor bottom-center
     }
 
     hideSystemInfo() {
-        const panel = document.getElementById('system-info-panel');
-        if (panel) panel.style.opacity = '0';
+        const pointer = document.getElementById('hover-pointer');
+        if (pointer) pointer.style.display = 'none';
     }
 
     setupAppEventListeners() {
