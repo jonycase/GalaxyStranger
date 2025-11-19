@@ -127,10 +127,22 @@ h1 {
     border-radius: 50%;
     z-index: 2;
     box-shadow: 0 0 20px currentColor;
+    cursor: pointer; /* Add cursor pointer */
+}
 
+.system-dot::after {
+    content: '';
+    position: absolute;
+    top: -12px;
+    left: -12px;
+    right: -12px;
+    bottom: -12px;
+    border-radius: 50%;
+    z-index: 2;
 }
 
 .system-name {
+    pointer-events: none; 
     position: absolute;
     color: rgba(200, 220, 255, 0.8);
     font-size: 12px;

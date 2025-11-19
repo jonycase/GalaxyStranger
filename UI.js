@@ -58,10 +58,10 @@ export class UI {
 
         if (!this.galaxyCanvas || !this.systemContainer || !this.shipContainer) return;
 
-        // Force CSS touch-action to prevent browser scrolling
+        // CRITICAL: Disable browser gestures on the canvas
         this.galaxyCanvas.style.touchAction = 'none';
 
-        // Initial resize to ensure canvas dimension matches CSS dimension
+        // Force initial resize calculation to render background
         this.handleResize();
 
         // Cache systems in a Map for O(1) lookup later
@@ -71,7 +71,7 @@ export class UI {
         // Pre-create a small pool to avoid creating nodes constantly
         this._createPool(Math.min(120, Math.max(40, Math.floor(this.gameState.galaxySize / 10))));
 
-        // Create ship indicator (single element only)
+        // Create ship indicator
         this.shipContainer.innerHTML = '';
         const shipIndicator = document.createElement('div');
         shipIndicator.className = 'ship-indicator';
@@ -81,14 +81,14 @@ export class UI {
 
         // Center camera on ship initially
         this.centerCameraOnShip();
-
-        // Setup interaction listeners (Clicks/Hover)
-        this.setupInput();
         
-        // Setup Pan/Zoom controls
+        // Setup Hover effects (Tooltips)
+        this.setupHoverInput();
+        
+        // Setup Unified Pan/Zoom/Click Controls
         this.setupCameraControls();
 
-        // Resize observer to resize canvas and schedule update
+        // Resize observer
         window.addEventListener('resize', () => {
             this.handleResize();
             this.scheduleUpdate();
@@ -97,7 +97,7 @@ export class UI {
         // Start the RAF loop
         requestAnimationFrame(this._onAnimationFrame);
         
-        // Ensure there's no leftover DOM from a previous run
+        // Cleanup leftovers
         Array.from(this.systemContainer.children).forEach(el => {
             if (el.id == 'map-center-btn') return;
             if (el.id == 'centerBtn') return;
@@ -108,22 +108,20 @@ export class UI {
         this.activeSystems.clear();
     }
 
-    // Fix for background rendering issue
+    // Fix: Separated resize logic to ensure stars draw when tab becomes visible
     handleResize() {
         if (!this.galaxyCanvas) return;
         
         const displayWidth = this.galaxyCanvas.clientWidth;
         const displayHeight = this.galaxyCanvas.clientHeight;
 
-        // Only resize if dimensions actually changed
         if (this.galaxyCanvas.width !== displayWidth || this.galaxyCanvas.height !== displayHeight) {
             this.galaxyCanvas.width = displayWidth;
             this.galaxyCanvas.height = displayHeight;
-            this.drawBackground(); // Redraw stars immediately
+            this.drawBackground(); 
         }
     }
-    
-    // Create initial DOM pool
+
     _createPool(size) {
         for (let i = 0; i < size; i++) {
             const dot = document.createElement('div');
@@ -134,19 +132,16 @@ export class UI {
             name.className = 'system-name';
             name.style.pointerEvents = 'none';
 
-            // Pools keep nodes detached until needed
             this.systemPool.push(dot);
             this.namePool.push(name);
         }
     }
 
-    // Acquire DOM pair from pool (creating more if needed)
     _acquireElements() {
         if (this.systemPool.length === 0) this._createPool(20);
         const dot = this.systemPool.pop();
         const name = this.namePool.pop();
 
-        // Defensive clean
         if (dot) {
             dot.dataset.id = '';
             dot.className = 'system-dot';
@@ -163,19 +158,15 @@ export class UI {
         return { dot, name };
     }
 
-    // Release DOM pair back to pool
     _releaseElements(pair) {
         if (!pair) return;
-
         const dot = pair.dot || pair.dotEl || null;
         const name = pair.name || pair.nameEl || null;
 
         try {
             if (dot && dot.parentNode) dot.parentNode.removeChild(dot);
             if (name && name.parentNode) name.parentNode.removeChild(name);
-        } catch (e) {
-            // ignore DOM removal errors
-        }
+        } catch (e) { }
 
         if (dot) {
             dot.dataset.id = '';
@@ -197,7 +188,6 @@ export class UI {
         }
     }
 
-    // Convert screen bounds -> world bounds
     _getVisibleWorldRect(margin = 80) {
         const w = this.galaxyCanvas.width;
         const h = this.galaxyCanvas.height;
@@ -211,7 +201,6 @@ export class UI {
         };
     }
 
-    // Schedule an update on next rAF
     scheduleUpdate() {
         if (this.pendingUpdate) return;
         this.pendingUpdate = true;
@@ -221,13 +210,11 @@ export class UI {
         });
     }
 
-    // main rAF tick
     _onAnimationFrame() {
         this.updateShipPosition();
         requestAnimationFrame(this._onAnimationFrame);
     }
 
-    // Draw static galaxy background
     drawBackground() {
         if (!this.galaxyCanvas) return;
         const ctx = this.galaxyCanvas.getContext('2d');
@@ -247,7 +234,6 @@ export class UI {
         }
     }
 
-    // Rebuild active set based on camera viewport
     _updateView() {
         if (!this.systemContainer || !this.galaxyCanvas) return;
 
@@ -255,7 +241,6 @@ export class UI {
         const activeSet = this.activeSystems;
         const sysMap = this.systemMap;
 
-        // Quick pass: mark active systems that go out of view
         for (const [id, elements] of activeSet.entries()) {
             const sys = sysMap.get(id);
             if (!sys) {
@@ -269,7 +254,6 @@ export class UI {
             }
         }
 
-        // Add visible systems that are not active yet
         for (let i = 0, len = this.gameState.galaxy.length; i < len; i++) {
             const sys = this.gameState.galaxy[i];
             if (sys.x >= rect.left && sys.x <= rect.right && sys.y >= rect.top && sys.y <= rect.bottom) {
@@ -278,7 +262,6 @@ export class UI {
                     dot.dataset.id = sys.id;
                     dot.style.backgroundColor = sys.discovered ? this._getEconomyColor(sys.economy) : '#666666';
                     name.textContent = sys.discovered ? sys.name : '???';
-                    
                     this.systemContainer.appendChild(dot);
                     this.systemContainer.appendChild(name);
                     activeSet.set(sys.id, { dotEl: dot, nameEl: name });
@@ -286,7 +269,6 @@ export class UI {
             }
         }
 
-        // Update positions + visuals
         for (const [id, elements] of activeSet.entries()) {
             const sys = sysMap.get(id);
             if (!sys) continue;
@@ -355,7 +337,216 @@ export class UI {
         this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
     }
 
-    // UI update (stats, market, etc.)
+    // --- NEW UNIFIED INPUT SYSTEM ---
+
+    // 1. Hover effects only (Selection moved to Camera Controls)
+    setupHoverInput() {
+        this.systemContainer.addEventListener('pointermove', (e) => {
+            const target = e.target.closest('.system-dot');
+            if (!target) {
+                this.hideSystemInfo();
+                return;
+            }
+            const systemId = parseInt(target.dataset.id, 10);
+            const system = this.systemMap.get(systemId);
+            if (system) {
+                this.showSystemInfo(system, e.clientX, e.clientY);
+            }
+        });
+        this.systemContainer.addEventListener('pointerleave', () => this.hideSystemInfo());
+    }
+
+    // 2. Helper for Selection
+    selectSystem(systemId) {
+        const system = this.systemMap.get(systemId);
+        if (system && system !== this.gameState.currentSystem) {
+            this.gameState.targetSystem = system;
+            this.updateUI();
+            this.showNotification(`Target: ${system.discovered ? system.name : 'Unknown System'}`);
+            this.scheduleUpdate();
+        }
+    }
+
+    // 3. Proximity Click Logic (The "Easy Click" Fix)
+    handleProximityClick(clientX, clientY, radius) {
+        const rect = this.galaxyCanvas.getBoundingClientRect();
+        const clickX = clientX - rect.left;
+        const clickY = clientY - rect.top;
+
+        let closestDist = radius;
+        let closestId = null;
+
+        // Iterate currently visible systems
+        for (const [id, elements] of this.activeSystems) {
+            const sys = this.systemMap.get(id);
+            if (!sys) continue;
+
+            const screenX = (sys.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
+            const screenY = (sys.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
+
+            const dist = Math.hypot(clickX - screenX, clickY - screenY);
+
+            if (dist < closestDist) {
+                closestDist = dist;
+                closestId = id;
+            }
+        }
+
+        if (closestId !== null) {
+            this.selectSystem(closestId);
+        }
+    }
+
+    // 4. Unified Camera + Selection Controller
+    setupCameraControls() {
+        const container = document.querySelector('.map-container');
+        if (!container || this.cameraControlsInitialized) return;
+        this.cameraControlsInitialized = true;
+
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let lastTouchDistance = 0;
+        let totalDragDistance = 0;
+
+        // Logic to decide if it was a click or a drag
+        const handleTap = (clientX, clientY, target) => {
+            if (isTraveling) return;
+
+            // Did we hit a specific dot?
+            const dot = target.closest('.system-dot');
+            if (dot) {
+                const systemId = parseInt(dot.dataset.id, 10);
+                this.selectSystem(systemId);
+                return;
+            }
+
+            // Otherwise check proximity
+            this.handleProximityClick(clientX, clientY, 45);
+        };
+
+        // --- MOUSE ---
+        container.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            totalDragDistance = 0;
+            container.style.cursor = 'grabbing';
+        });
+
+        container.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            totalDragDistance += Math.hypot(dx, dy);
+            this.moveCamera(-dx, -dy);
+            startX = e.clientX;
+            startY = e.clientY;
+            this.scheduleUpdate();
+        });
+
+        const endMouse = (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            container.style.cursor = 'grab';
+            if (totalDragDistance < 10) {
+                handleTap(e.clientX, e.clientY, e.target);
+            }
+        };
+
+        container.addEventListener('mouseup', endMouse);
+        container.addEventListener('mouseleave', () => { isDragging = false; container.style.cursor = 'grab'; });
+
+        // --- TOUCH (Passive: False) ---
+        container.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                totalDragDistance = 0;
+            } else if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                lastTouchDistance = Math.sqrt(dx * dx + dy * dy);
+                isDragging = false; 
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchmove', (e) => {
+            if (e.cancelable) e.preventDefault();
+
+            if (isDragging && e.touches.length === 1) {
+                const dx = e.touches[0].clientX - startX;
+                const dy = e.touches[0].clientY - startY;
+                totalDragDistance += Math.hypot(dx, dy);
+                this.moveCamera(-dx, -dy);
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                this.scheduleUpdate();
+            } else if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (lastTouchDistance > 0) {
+                    const diff = distance - lastTouchDistance;
+                    this.setZoom(this.camera.zoom + (diff * 0.015));
+                }
+                lastTouchDistance = distance;
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchend', (e) => {
+            if (isDragging && e.touches.length === 0) {
+                isDragging = false;
+                if (totalDragDistance < 10) {
+                    const touch = e.changedTouches[0];
+                    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+                    handleTap(touch.clientX, touch.clientY, target || e.target);
+                }
+            }
+            if (e.touches.length === 0) {
+                isDragging = false;
+                lastTouchDistance = 0;
+            }
+        });
+
+        // --- WHEEL ---
+        container.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomAmount = e.deltaY > 0 ? -0.1 : 0.1;
+            this.setZoom(this.camera.zoom + zoomAmount);
+        }, { passive: false });
+        
+        // Center Button
+        const existingBtn = document.querySelector('.map-center-btn');
+        if (existingBtn) existingBtn.remove();
+
+        const centerBtn = document.createElement('div');
+        centerBtn.className = 'map-center-btn';
+        centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
+        centerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const startX = this.camera.x;
+            const startY = this.camera.y;
+            const startTime = Date.now();
+            const duration = 500;
+            
+            const animateCenter = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easedProgress = easeInOutCubic(progress);
+                this.camera.x = startX + (this.gameState.ship.x - startX) * easedProgress;
+                this.camera.y = startY + (this.gameState.ship.y - startY) * easedProgress;
+                this.scheduleUpdate();
+                if (progress < 1) requestAnimationFrame(animateCenter);
+            };
+            animateCenter();
+        });
+        container.appendChild(centerBtn);
+    }
+
+    // UI update
     updateUI() {
         const creditsEl = document.getElementById('credits');
         const fuelEl = document.getElementById('fuel');
@@ -502,9 +693,7 @@ export class UI {
             if (statusTab) {
                 const existingBtn = document.getElementById('scan-btn');
                 if (existingBtn) existingBtn.remove();
-                
                 statusTab.appendChild(scanButton);
-                
                 scanButton.addEventListener('click', () => {
                     const result = this.gameState.scanNearbySystems();
                     if (this.gameState.ship.radar === 0) {
@@ -756,195 +945,6 @@ export class UI {
     hideSystemInfo() {
         const panel = document.getElementById('system-info-panel');
         if (panel) panel.style.opacity = '0';
-    }
-
-    // Interaction for clicking/hovering systems
-    setupInput() {
-        this.systemContainer.addEventListener('click', (e) => {
-            if (isTraveling) return;
-            
-            const target = e.target.closest('.system-dot');
-            if (!target) return;
-            
-            const systemId = parseInt(target.dataset.id, 10);
-            const system = this.systemMap.get(systemId);
-            
-            if (system && system !== this.gameState.currentSystem) {
-                this.gameState.targetSystem = system;
-                this.updateUI();
-                this.showNotification(`Target: ${system.discovered ? system.name : 'Unknown System'}`);
-                this.scheduleUpdate();
-            }
-        });
-
-        this.systemContainer.addEventListener('pointermove', (e) => {
-            const target = e.target.closest('.system-dot');
-            if (!target) {
-                this.hideSystemInfo();
-                return;
-            }
-            const systemId = parseInt(target.dataset.id, 10);
-            const system = this.systemMap.get(systemId);
-            if (system) {
-                this.showSystemInfo(system, e.clientX, e.clientY);
-            }
-        });
-
-        this.systemContainer.addEventListener('pointerleave', () => this.hideSystemInfo());
-    }
-
-    // Pan and Zoom controls (Mobile Fixes Here)
-    setupCameraControls() {
-        const galaxyCanvas = this.galaxyCanvas;
-        if (!galaxyCanvas || this.cameraControlsInitialized) return;
-        this.cameraControlsInitialized = true;
-
-        let isDragging = false;
-        let lastX = 0;
-        let lastY = 0;
-        let lastTouchDistance = 0;
-        
-        // Mouse Drag
-        galaxyCanvas.addEventListener('mousedown', (e) => {
-            isDragging = true;
-            lastX = e.clientX;
-            lastY = e.clientY;
-            galaxyCanvas.style.cursor = 'grabbing';
-            e.preventDefault();
-        });
-        
-        galaxyCanvas.addEventListener('mousemove', (e) => {
-            if (isDragging) {
-                const dx = (e.clientX - lastX);
-                const dy = (e.clientY - lastY);
-                this.moveCamera(-dx, -dy);
-                lastX = e.clientX;
-                lastY = e.clientY;
-                this.scheduleUpdate();
-            }
-        });
-        
-        const handleMouseUp = () => {
-            isDragging = false;
-            galaxyCanvas.style.cursor = 'grab';
-        };
-        
-        galaxyCanvas.addEventListener('mouseup', handleMouseUp);
-        galaxyCanvas.addEventListener('mouseleave', handleMouseUp);
-        
-        // Mouse Wheel (PASSIVE: FALSE required to prevent page scroll)
-        galaxyCanvas.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const zoomAmount = e.deltaY > 0 ? -0.1 : 0.1;
-            const newZoom = this.camera.zoom + zoomAmount;
-            
-            const startZoom = this.camera.zoom;
-            const targetZoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, newZoom));
-            const startTime = Date.now();
-            const duration = 600;
-            
-            const animateZoom = () => {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration * 50 , 1);
-                const easedProgress = easeInOutCubic(progress);
-                
-                this.camera.zoom = startZoom + (targetZoom - startZoom) * easedProgress;
-                this.scheduleUpdate();
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateZoom);
-                }
-            };
-            animateZoom();
-        }, { passive: false });
-        
-        // Touch Controls (Pinch to Zoom + Pan)
-        galaxyCanvas.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 1) {
-                isDragging = true;
-                lastX = e.touches[0].clientX;
-                lastY = e.touches[0].clientY;
-            } else if (e.touches.length === 2) {
-                // 2 fingers = pinch zoom start
-                const dx = e.touches[0].clientX - e.touches[1].clientX;
-                const dy = e.touches[0].clientY - e.touches[1].clientY;
-                lastTouchDistance = Math.sqrt(dx * dx + dy * dy);
-                isDragging = false; // stop panning
-            }
-        }, { passive: false });
-        
-        galaxyCanvas.addEventListener('touchmove', (e) => {
-            if (e.cancelable) e.preventDefault(); // CRITICAL: Stops whole page from zooming/scrolling
-
-            if (isDragging && e.touches.length === 1) {
-                // Pan
-                const dx = (e.touches[0].clientX - lastX);
-                const dy = (e.touches[0].clientY - lastY);
-                this.moveCamera(-dx, -dy);
-                lastX = e.touches[0].clientX;
-                lastY = e.touches[0].clientY;
-                this.scheduleUpdate();
-            } else if (e.touches.length === 2) {
-                // Zoom
-                const dx = e.touches[0].clientX - e.touches[1].clientX;
-                const dy = e.touches[0].clientY - e.touches[1].clientY;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (lastTouchDistance > 0) {
-                    const diff = distance - lastTouchDistance;
-                    // Mobile zoom sensitivity
-                    const zoomChange = diff * 0.015; 
-                    this.setZoom(this.camera.zoom + zoomChange);
-                }
-                lastTouchDistance = distance;
-            }
-        }, { passive: false });
-        
-        galaxyCanvas.addEventListener('touchend', (e) => {
-            if (e.touches.length < 2) {
-                lastTouchDistance = 0;
-            }
-            if (e.touches.length === 0) {
-                isDragging = false;
-            }
-            if (e.touches.length === 1) {
-                // Reset pan coords to avoid jump
-                isDragging = true;
-                lastX = e.touches[0].clientX;
-                lastY = e.touches[0].clientY;
-            }
-        });
-        
-        // Re-add Center Button
-        const existingBtn = document.querySelector('.map-center-btn');
-        if (existingBtn) existingBtn.remove();
-
-        const centerBtn = document.createElement('div');
-        centerBtn.className = 'map-center-btn';
-        centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
-        centerBtn.addEventListener('click', () => {
-            const startX = this.camera.x;
-            const startY = this.camera.y;
-            const startTime = Date.now();
-            const duration = 500;
-            
-            const animateCenter = () => {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const easedProgress = easeInOutCubic(progress);
-                
-                this.camera.x = startX + (this.gameState.ship.x - startX) * easedProgress;
-                this.camera.y = startY + (this.gameState.ship.y - startY) * easedProgress;
-                this.scheduleUpdate();
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateCenter);
-                }
-            };
-            animateCenter();
-        });
-        
-        document.querySelector('.map-container').appendChild(centerBtn);
     }
 
     setupAppEventListeners() {
