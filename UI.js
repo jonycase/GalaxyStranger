@@ -19,7 +19,7 @@ export class UI {
         this.camera = {
             x: 0,
             y: 0,
-            zoom: 3, // Initial zoom
+            zoom: 3,
             minZoom: 1,
             maxZoom: 15
         };
@@ -220,20 +220,21 @@ export class UI {
     }
 
     _onAnimationFrame() {
-        // Update pointer every frame to ensure smoothness during pan/zoom
-        this.updateTargetPointer(); 
         this.updateShipPosition();
+        this.updateTargetPointer(); // Update every frame for smoothness
         requestAnimationFrame(this._onAnimationFrame);
     }
 
-    // --- CORRECTED SMART POINTER LOGIC ---
+    // --- SMART TARGET POINTER LOGIC (CORRECTED) ---
     updateTargetPointer() {
+        // Safety checks
         if (!this.targetPointerEl || !this.galaxyCanvas || !this.gameState.targetSystem) {
             if(this.targetPointerEl) this.targetPointerEl.style.display = 'none';
             return;
         }
 
         const target = this.gameState.targetSystem;
+        const ship = this.gameState.ship;
         
         // Hide if we are at the target system
         if (target === this.gameState.currentSystem) {
@@ -242,18 +243,18 @@ export class UI {
         }
 
         // 1. Calculate Target Position on Screen relative to Camera Center
+        // Note: Pointer relies on Camera View, not just Ship position
         const w = this.galaxyCanvas.clientWidth;
         const h = this.galaxyCanvas.clientHeight;
         const cx = w / 2;
         const cy = h / 2;
 
-        // Transform World Coordinate -> Screen Coordinate
-        // screenX = (worldX - cameraX) * zoom + centerX
+        // Projection: (worldPos - cameraPos) * zoom + centerOffset
         const targetScreenX = (target.x - this.camera.x) * this.camera.zoom + cx;
         const targetScreenY = (target.y - this.camera.y) * this.camera.zoom + cy;
 
-        // 2. Determine Screen Bounds with Margin
-        const margin = 50; // Padding from edge
+        // 2. Define Screen Bounds (Safe Area)
+        const margin = 50; 
         const minX = margin;
         const maxX = w - margin;
         const minY = margin;
@@ -283,18 +284,13 @@ export class UI {
             const angle = Math.atan2(dy, dx); // Radians
 
             // Clamp to Ellipse/Box edge
-            // We scale the vector so it hits the bounding box defined by margin
-            // Slope m = dy / dx
-            
             const wHalf = (w / 2) - margin;
             const hHalf = (h / 2) - margin;
             
-            // Simple Clamping to edge of bounding box
-            // Calculate intersection with the box edges
+            // Intersection math to find point on bounding box
             const absCos = Math.abs(Math.cos(angle));
             const absSin = Math.abs(Math.sin(angle));
             
-            // Which wall does it hit?
             if (wHalf * absSin <= hHalf * absCos) {
                 // Hits vertical wall (left or right)
                 finalX = cx + (dx > 0 ? wHalf : -wHalf);
@@ -305,11 +301,8 @@ export class UI {
                 finalX = cx + (dy > 0 ? hHalf : -hHalf) / Math.tan(angle);
             }
 
-            // Rotate arrow to point outward
-            // angle 0 is Right. -90 is Up.
-            // CSS rotation: 0deg is determined by icon. fa-chevron-up points UP.
-            // So if angle is -90deg (-PI/2), rotation should be 0deg.
-            // Rotation = angleDeg + 90
+            // Rotate arrow to point outward 
+            // (angle is rads, +90deg to align 'Up' icon with vector)
             rotation = (angle * 180 / Math.PI) + 90;
         }
 
@@ -317,20 +310,25 @@ export class UI {
         this.targetPointerEl.style.display = 'flex';
         this.targetPointerEl.style.left = `${finalX}px`;
         this.targetPointerEl.style.top = `${finalY}px`;
-        this.targetPointerEl.style.transform = `translate(-50%, -50%)`; // Center the div itself
+        this.targetPointerEl.style.transform = `translate(-50%, -50%)`;
 
         const arrow = this.targetPointerEl.querySelector('.pointer-arrow');
         if (arrow) {
             arrow.style.transform = `rotate(${rotation}deg)`;
         }
 
-        // 5. Update Text
+        // 5. Update Text (Corrected Logic for Undiscovered)
         const dist = this.gameState.calculateDistance(this.gameState.currentSystem, target);
         const nameEl = document.getElementById('pointer-name');
         const distEl = document.getElementById('pointer-dist');
         
-        if (nameEl) nameEl.textContent = target.name;
-        if (distEl) distEl.textContent = dist.toFixed(1) + " LY";
+        if (nameEl) {
+            // FIX: Hide real name if undiscovered
+            nameEl.textContent = target.discovered ? target.name : 'Unknown System';
+        }
+        if (distEl) {
+            distEl.textContent = dist.toFixed(1) + " LY";
+        }
     }
 
     drawBackground() {
@@ -412,8 +410,7 @@ export class UI {
             dotEl.style.boxShadow = isTarget ? '0 0 10px #ffcc66, 0 0 20px #ffcc66' : '0 0 10px currentColor';
             dotEl.style.zIndex = isTarget ? '100' : '2';
         }
-        
-        // Ensure ship position is updated with view
+
         this.updateShipPosition();
     }
 
@@ -433,6 +430,7 @@ export class UI {
     centerCameraOnShip() {
         this.camera.x = this.gameState.ship.x;
         this.camera.y = this.gameState.ship.y;
+        this.camera.zoom = 3.0;
         this.scheduleUpdate();
     }
 
@@ -478,7 +476,8 @@ export class UI {
         if (system && system !== this.gameState.currentSystem) {
             this.gameState.targetSystem = system;
             this.updateUI();
-            this.showNotification(`Target: ${system.discovered ? system.name : 'Unknown System'}`);
+            const name = system.discovered ? system.name : 'Unknown System';
+            this.showNotification(`Target: ${name}`);
             this.scheduleUpdate();
         }
     }
@@ -565,7 +564,7 @@ export class UI {
         container.addEventListener('mouseup', endMouse);
         container.addEventListener('mouseleave', () => { isDragging = false; container.style.cursor = 'grab'; });
 
-        // Touch Controls
+        // Touch
         container.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 isDragging = true;
@@ -635,7 +634,6 @@ export class UI {
     }
 
     updateUI() {
-        // Sync Widget UI
         if(this.galaxyMap) this.galaxyMap.updateInfoBox();
 
         const creditsEl = document.getElementById('credits');
@@ -654,8 +652,10 @@ export class UI {
         if (cargoSpaceEl) cargoSpaceEl.textContent = `${cargoSpace}/${this.gameState.cargoCapacity}`;
         
         if (this.gameState.targetSystem) {
-            if (targetSystemEl) targetSystemEl.textContent = this.gameState.targetSystem.discovered ? 
+            const name = this.gameState.targetSystem.discovered ? 
                 this.gameState.targetSystem.name : 'Unknown System';
+            if (targetSystemEl) targetSystemEl.textContent = name;
+            
             const distance = this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
             if (distanceEl) distanceEl.textContent = Math.round(distance * 10) / 10 + ' LY';
             const fuelCost = Math.ceil(distance);
@@ -794,7 +794,6 @@ export class UI {
                         this.showNotification(result.message);
                         this.scheduleUpdate();
                         this.updateUI();
-                        // Refresh Map Grid
                         this.galaxyMap.setup();
                     } else {
                         this.showNotification(result.message);
@@ -1040,7 +1039,7 @@ export class UI {
     }
 
     setupAppEventListeners() {
-        // Open Galaxy Map Button
+        // Open Galaxy Map
         const mapBtn = document.getElementById('open-map-btn');
         if (mapBtn) {
             mapBtn.addEventListener('click', () => {
@@ -1109,7 +1108,6 @@ export class UI {
                     
                     if (!this.gameState.currentSystem.discovered) {
                         this.gameState.currentSystem.discovered = true;
-                        // Update map color cache if needed
                         this.galaxyMap.setup(); 
                         this.scheduleUpdate();
                     }
