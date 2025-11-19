@@ -1,4 +1,6 @@
 // UI.js
+import { StarBackground } from './Background.js'; // Import the new file
+
 function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
@@ -19,6 +21,14 @@ export class UI {
             minZoom: 1,
             maxZoom: 15
         };
+
+        // Initialize Background System
+        this.background = new StarBackground({
+            tileSize: 1024,
+            farStarCount: 600,
+            nearStarCount: 200,
+            nebulaDensity: 8
+        });
 
         // Pools & active sets
         this.systemPool = [];
@@ -58,20 +68,19 @@ export class UI {
 
         if (!this.galaxyCanvas || !this.systemContainer || !this.shipContainer) return;
 
-        // CRITICAL: Disable browser gestures on the canvas
         this.galaxyCanvas.style.touchAction = 'none';
 
-        // Force initial resize calculation to render background
+        // Initial resize
         this.handleResize();
 
-        // Cache systems in a Map for O(1) lookup later
+        // Cache systems
         this.systemMap.clear();
         this.gameState.galaxy.forEach(sys => this.systemMap.set(sys.id, sys));
 
-        // Pre-create a small pool to avoid creating nodes constantly
+        // Pools
         this._createPool(Math.min(120, Math.max(40, Math.floor(this.gameState.galaxySize / 10))));
 
-        // Create ship indicator
+        // Ship indicator
         this.shipContainer.innerHTML = '';
         const shipIndicator = document.createElement('div');
         shipIndicator.className = 'ship-indicator';
@@ -79,25 +88,20 @@ export class UI {
         this.shipIndicatorEl = shipIndicator;
         this.shipContainer.appendChild(this.shipIndicatorEl);
 
-        // Center camera on ship initially
         this.centerCameraOnShip();
         
-        // Setup Hover effects (Tooltips)
         this.setupHoverInput();
-        
-        // Setup Unified Pan/Zoom/Click Controls
         this.setupCameraControls();
 
-        // Resize observer
         window.addEventListener('resize', () => {
             this.handleResize();
             this.scheduleUpdate();
         });
 
-        // Start the RAF loop
+        // Start Loop
         requestAnimationFrame(this._onAnimationFrame);
         
-        // Cleanup leftovers
+        // Cleanup
         Array.from(this.systemContainer.children).forEach(el => {
             if (el.id == 'map-center-btn') return;
             if (el.id == 'centerBtn') return;
@@ -108,7 +112,6 @@ export class UI {
         this.activeSystems.clear();
     }
 
-    // Fix: Separated resize logic to ensure stars draw when tab becomes visible
     handleResize() {
         if (!this.galaxyCanvas) return;
         
@@ -118,20 +121,43 @@ export class UI {
         if (this.galaxyCanvas.width !== displayWidth || this.galaxyCanvas.height !== displayHeight) {
             this.galaxyCanvas.width = displayWidth;
             this.galaxyCanvas.height = displayHeight;
-            this.drawBackground(); 
+            // No need to call drawBackground() here manually, 
+            // because _onAnimationFrame handles it now.
         }
     }
+
+    _onAnimationFrame(timestamp) {
+        // 1. Draw the dynamic parallax background
+        if (this.galaxyCanvas) {
+            const ctx = this.galaxyCanvas.getContext('2d');
+            this.background.draw(
+                ctx, 
+                this.camera.x, 
+                this.camera.y, 
+                this.galaxyCanvas.width, 
+                this.galaxyCanvas.height,
+                timestamp // Pass time for twinkling
+            );
+        }
+
+        // 2. Update Ship DOM position
+        this.updateShipPosition();
+
+        // Loop
+        requestAnimationFrame(this._onAnimationFrame);
+    }
+
+    // --- REMOVED OLD drawBackground() METHOD ---
+    // The background is now drawn every frame in _onAnimationFrame
 
     _createPool(size) {
         for (let i = 0; i < size; i++) {
             const dot = document.createElement('div');
             dot.className = 'system-dot';
             dot.style.pointerEvents = 'auto';
-
             const name = document.createElement('div');
             name.className = 'system-name';
             name.style.pointerEvents = 'none';
-
             this.systemPool.push(dot);
             this.namePool.push(name);
         }
@@ -154,7 +180,6 @@ export class UI {
             if (name.parentNode) name.parentNode.removeChild(name);
             name.style.pointerEvents = 'none';
         }
-
         return { dot, name };
     }
 
@@ -162,7 +187,6 @@ export class UI {
         if (!pair) return;
         const dot = pair.dot || pair.dotEl || null;
         const name = pair.name || pair.nameEl || null;
-
         try {
             if (dot && dot.parentNode) dot.parentNode.removeChild(dot);
             if (name && name.parentNode) name.parentNode.removeChild(name);
@@ -178,7 +202,6 @@ export class UI {
             dot.style.pointerEvents = 'auto';
             this.systemPool.push(dot);
         }
-
         if (name) {
             name.textContent = '';
             name.className = 'system-name';
@@ -210,30 +233,6 @@ export class UI {
         });
     }
 
-    _onAnimationFrame() {
-        this.updateShipPosition();
-        requestAnimationFrame(this._onAnimationFrame);
-    }
-
-    drawBackground() {
-        if (!this.galaxyCanvas) return;
-        const ctx = this.galaxyCanvas.getContext('2d');
-        ctx.clearRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
-        ctx.fillStyle = '#000033';
-        ctx.fillRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
-
-        ctx.fillStyle = '#ffffff';
-        const starCount = Math.min(900, Math.floor((this.galaxyCanvas.width * this.galaxyCanvas.height) / 2000));
-        for (let i = 0; i < starCount; i++) {
-            const x = Math.random() * this.galaxyCanvas.width;
-            const y = Math.random() * this.galaxyCanvas.height;
-            const size = Math.random() * 1.8;
-            ctx.beginPath();
-            ctx.arc(x, y, size, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-
     _updateView() {
         if (!this.systemContainer || !this.galaxyCanvas) return;
 
@@ -241,19 +240,16 @@ export class UI {
         const activeSet = this.activeSystems;
         const sysMap = this.systemMap;
 
+        // Cleanup out of view
         for (const [id, elements] of activeSet.entries()) {
             const sys = sysMap.get(id);
-            if (!sys) {
-                this._releaseElements(elements);
-                activeSet.delete(id);
-                continue;
-            }
-            if (sys.x < rect.left || sys.x > rect.right || sys.y < rect.top || sys.y > rect.bottom) {
+            if (!sys || (sys.x < rect.left || sys.x > rect.right || sys.y < rect.top || sys.y > rect.bottom)) {
                 this._releaseElements(elements);
                 activeSet.delete(id);
             }
         }
 
+        // Add in view
         for (let i = 0, len = this.gameState.galaxy.length; i < len; i++) {
             const sys = this.gameState.galaxy[i];
             if (sys.x >= rect.left && sys.x <= rect.right && sys.y >= rect.top && sys.y <= rect.bottom) {
@@ -269,6 +265,7 @@ export class UI {
             }
         }
 
+        // Update visuals
         for (const [id, elements] of activeSet.entries()) {
             const sys = sysMap.get(id);
             if (!sys) continue;
@@ -337,9 +334,7 @@ export class UI {
         this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
     }
 
-    // --- NEW UNIFIED INPUT SYSTEM ---
-
-    // 1. Hover effects only (Selection moved to Camera Controls)
+    // --- INPUT HANDLING ---
     setupHoverInput() {
         this.systemContainer.addEventListener('pointermove', (e) => {
             const target = e.target.closest('.system-dot');
@@ -356,7 +351,6 @@ export class UI {
         this.systemContainer.addEventListener('pointerleave', () => this.hideSystemInfo());
     }
 
-    // 2. Helper for Selection
     selectSystem(systemId) {
         const system = this.systemMap.get(systemId);
         if (system && system !== this.gameState.currentSystem) {
@@ -367,7 +361,6 @@ export class UI {
         }
     }
 
-    // 3. Proximity Click Logic (The "Easy Click" Fix)
     handleProximityClick(clientX, clientY, radius) {
         const rect = this.galaxyCanvas.getBoundingClientRect();
         const clickX = clientX - rect.left;
@@ -376,7 +369,6 @@ export class UI {
         let closestDist = radius;
         let closestId = null;
 
-        // Iterate currently visible systems
         for (const [id, elements] of this.activeSystems) {
             const sys = this.systemMap.get(id);
             if (!sys) continue;
@@ -397,7 +389,6 @@ export class UI {
         }
     }
 
-    // 4. Unified Camera + Selection Controller
     setupCameraControls() {
         const container = document.querySelector('.map-container');
         if (!container || this.cameraControlsInitialized) return;
@@ -409,23 +400,18 @@ export class UI {
         let lastTouchDistance = 0;
         let totalDragDistance = 0;
 
-        // Logic to decide if it was a click or a drag
         const handleTap = (clientX, clientY, target) => {
             if (isTraveling) return;
-
-            // Did we hit a specific dot?
             const dot = target.closest('.system-dot');
             if (dot) {
                 const systemId = parseInt(dot.dataset.id, 10);
                 this.selectSystem(systemId);
                 return;
             }
-
-            // Otherwise check proximity
             this.handleProximityClick(clientX, clientY, 45);
         };
 
-        // --- MOUSE ---
+        // Mouse
         container.addEventListener('mousedown', (e) => {
             isDragging = true;
             startX = e.clientX;
@@ -454,11 +440,10 @@ export class UI {
                 handleTap(e.clientX, e.clientY, e.target);
             }
         };
-
         container.addEventListener('mouseup', endMouse);
         container.addEventListener('mouseleave', () => { isDragging = false; container.style.cursor = 'grab'; });
 
-        // --- TOUCH (Passive: False) ---
+        // Touch
         container.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 isDragging = true;
@@ -475,7 +460,6 @@ export class UI {
 
         container.addEventListener('touchmove', (e) => {
             if (e.cancelable) e.preventDefault();
-
             if (isDragging && e.touches.length === 1) {
                 const dx = e.touches[0].clientX - startX;
                 const dy = e.touches[0].clientY - startY;
@@ -511,7 +495,7 @@ export class UI {
             }
         });
 
-        // --- WHEEL ---
+        // Wheel
         container.addEventListener('wheel', (e) => {
             e.preventDefault();
             const zoomAmount = e.deltaY > 0 ? -0.1 : 0.1;
@@ -521,7 +505,6 @@ export class UI {
         // Center Button
         const existingBtn = document.querySelector('.map-center-btn');
         if (existingBtn) existingBtn.remove();
-
         const centerBtn = document.createElement('div');
         centerBtn.className = 'map-center-btn';
         centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
@@ -531,7 +514,6 @@ export class UI {
             const startY = this.camera.y;
             const startTime = Date.now();
             const duration = 500;
-            
             const animateCenter = () => {
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(elapsed / duration, 1);
@@ -546,7 +528,8 @@ export class UI {
         container.appendChild(centerBtn);
     }
 
-    // UI update
+    // --- APP LOGIC / NOTIFICATIONS / MARKET ---
+    // (Keep the existing methods below same as previous version)
     updateUI() {
         const creditsEl = document.getElementById('credits');
         const fuelEl = document.getElementById('fuel');
@@ -592,15 +575,12 @@ export class UI {
                 this.gameState.goods.forEach(good => {
                     const marketItem = this.gameState.currentSystem.market[good.id];
                     if (!marketItem) return;
-        
                     const marketElement = document.createElement('div');
                     marketElement.className = 'market-item';
-                    
                     const illegalIndicator = marketItem.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
                     const stockIndicator = marketItem.quantity > 0 ? 
                         `<span style="color: #66ff99;">${marketItem.quantity}</span>` : 
                         `<span style="color: #ff6666;">0</span>`;
-                    
                     marketElement.innerHTML = `
                         <span>${illegalIndicator}${marketItem.name}</span>
                         <span>${marketItem.buyPrice} CR</span>
@@ -631,16 +611,10 @@ export class UI {
                     const illegalIndicator = item.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
                     const marketItem = this.gameState.currentSystem.market?.[item.id];
                     const canSell = this.gameState.currentSystem.hasMarket && marketItem;
-                    
                     cargoItem.innerHTML = `
                         <span>${illegalIndicator}${item.name}</span>
                         <span>${item.quantity}</span>
-                        <button class="btn btn-sell" 
-                                data-good="${item.id}" 
-                                data-action="sell-one" 
-                                ${canSell ? '' : 'disabled'}>
-                            SELL
-                        </button>
+                        <button class="btn btn-sell" data-good="${item.id}" data-action="sell-one" ${canSell ? '' : 'disabled'}>SELL</button>
                     `;
                     cargoContainer.appendChild(cargoItem);
                 });
@@ -683,12 +657,10 @@ export class UI {
             scanButton.innerHTML = '<i class="fas fa-satellite"></i> SCAN SYSTEMS';
             scanButton.style.marginTop = '10px';
             scanButton.style.width = '100%';
-
             if (this.gameState.ship.radar === 0) {
                 scanButton.disabled = true;
                 scanButton.style.opacity = '0.6';
             }
-
             const statusTab = document.querySelector('.status-tab');
             if (statusTab) {
                 const existingBtn = document.getElementById('scan-btn');
@@ -732,7 +704,6 @@ export class UI {
                 this.updateUI();
             });
         });
-        
         this.scheduleUpdate();
     }
 
@@ -769,30 +740,24 @@ export class UI {
                 fuelNeeded = this.gameState.maxFuel - this.gameState.fuel;
                 totalCost = fuelNeeded * costPerUnit;
             }
-            
             if (overviewRefuelCost) {
                 overviewRefuelCost.textContent = this.gameState.currentSystem.hasRefuel ? 
-                    `Refuel cost: ${totalCost} CR` : 
-                    'Refuel not available';
+                    `Refuel cost: ${totalCost} CR` : 'Refuel not available';
             }
             
             const cargoSpace = this.gameState.cargo.reduce((sum, item) => sum + item.quantity, 0);
             let cargoValue = 0;
-            
             if (this.gameState.currentSystem.hasMarket) {
                 this.gameState.cargo.forEach(item => {
                     const marketItem = this.gameState.currentSystem.market?.[item.id];
-                    if (marketItem) {
-                        cargoValue += marketItem.sellPrice * item.quantity;
-                    }
+                    if (marketItem) cargoValue += marketItem.sellPrice * item.quantity;
                 });
             }
             
             if (overviewCargo) overviewCargo.textContent = `${cargoSpace}/${this.gameState.cargoCapacity} units`;
             if (overviewCargoValue) {
                 overviewCargoValue.textContent = this.gameState.currentSystem.hasMarket ? 
-                    `Value: ${cargoValue.toLocaleString()} CR` : 
-                    'Market not available';
+                    `Value: ${cargoValue.toLocaleString()} CR` : 'Market not available';
             }
             
             let threatLevel = "Low";
@@ -817,13 +782,11 @@ export class UI {
                     const distance = this.gameState.calculateDistance(this.gameState.currentSystem, system);
                     return distance <= 50 && system.discovered;
                 });
-                
                 nearby.sort((a, b) => {
                     const distA = this.gameState.calculateDistance(this.gameState.currentSystem, a);
                     const distB = this.gameState.calculateDistance(this.gameState.currentSystem, b);
                     return distA - distB;
                 });
-                
                 nearby.slice(0, 5).forEach(system => {
                     const distance = this.gameState.calculateDistance(this.gameState.currentSystem, system);
                     const systemEl = document.createElement('div');
@@ -836,7 +799,6 @@ export class UI {
                     `;
                     nearbySystems.appendChild(systemEl);
                 });
-                
                 if (nearby.length === 0) {
                     nearbySystems.innerHTML = '<div style="text-align: center; padding: 10px; color: #8888ff;">No discovered systems nearby</div>';
                 }
@@ -847,27 +809,21 @@ export class UI {
     updateContractsList() {
         const contractsList = document.getElementById('contracts-list');
         if (!contractsList) return;
-        
         contractsList.innerHTML = '';
-        
         if (this.gameState.contracts.length === 0) {
             contractsList.innerHTML = '<div style="text-align: center; padding: 10px; color: #8888ff;">No contracts available</div>';
             return;
         }
-        
         this.gameState.contracts.forEach(contract => {
             if (contract.completed) return;
-            
             const contractEl = document.createElement('div');
             contractEl.className = 'contract-item';
-            
             let buttonText = "Accept";
             if (contract.type === 'delivery' && contract.originSystem === this.gameState.currentSystem) {
                 buttonText = "Pick Up";
             } else if (contract.type === 'delivery' && contract.targetSystem === this.gameState.currentSystem) {
                 buttonText = "Deliver";
             }
-            
             contractEl.innerHTML = `
                 <div class="contract-header">
                     <h3>${contract.name}</h3>
@@ -883,11 +839,9 @@ export class UI {
     showNotification(message) {
         const notification = document.getElementById('notification');
         if (!notification) return;
-        
         notification.textContent = message;
         notification.style.opacity = '1';
         notification.style.transform = 'translateX(-50%) translateY(0)';
-        
         setTimeout(() => {
             notification.style.opacity = '0';
             notification.style.transform = 'translateX(-50%) translateY(-20px)';
@@ -897,10 +851,8 @@ export class UI {
     showSystemInfo(system, clientX, clientY) {
         const panel = document.getElementById('system-info-panel');
         if (!panel) return;
-
         const screenX = (system.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
         const screenY = (system.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
-        
         if (!system.discovered) {
             panel.innerHTML = `
                 <h3>Unknown System</h3>
@@ -915,7 +867,6 @@ export class UI {
             if (system.hasRefuel) services.push('Refuel');
             if (system.hasMarket) services.push('Market');
             if (system.hasSpecial) services.push('Special');
-            
             panel.innerHTML = `
                 <h3>${system.name}</h3>
                 <div class="stat">
@@ -936,7 +887,6 @@ export class UI {
                 </div>
             `;
         }
-        
         panel.style.left = `${screenX + 10}px`;
         panel.style.top = `${screenY}px`;
         panel.style.opacity = '1';
@@ -954,83 +904,63 @@ export class UI {
                 this.showNotification("Already traveling!");
                 return;
             }
-
             if (!this.gameState.targetSystem) {
                 this.showNotification("Select a system to travel to!");
                 return;
             }
-
             const result = this.gameState.travelToSystem();
             if (!result.success) {
                 this.showNotification(result.message);
                 return;
             }
-            
             isTraveling = true;
-            document.querySelectorAll('button').forEach(btn => {
-                btn.disabled = true;
-            });
+            document.querySelectorAll('button').forEach(btn => btn.disabled = true);
             document.querySelector('.ui-panel').classList.add('traveling');
-
             this.showNotification(result.message);
-            
             const startTime = Date.now();
             const travelDuration = 2000 * this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
-            
             const animateTravel = () => {
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(elapsed / travelDuration, 1);
                 const easedProgress = easeInOutCubic(progress);
                 this.gameState.ship.travelProgress = easedProgress;
-                
                 if (this.shipIndicatorEl) {
                     this.gameState.ship.x = this.gameState.currentSystem.x + (this.gameState.targetSystem.x - this.gameState.currentSystem.x) * easedProgress;
                     this.gameState.ship.y = this.gameState.currentSystem.y + (this.gameState.targetSystem.y - this.gameState.currentSystem.y) * easedProgress;
-                    
                     this.updateShipPosition();
                     this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
                 }
-                
                 if (progress < 1) {
                     requestAnimationFrame(animateTravel);
                 } else {
                     isTraveling = false;
-                    document.querySelectorAll('button').forEach(btn => {
-                        btn.disabled = false;
-                    });
+                    document.querySelectorAll('button').forEach(btn => btn.disabled = false);
                     document.querySelector('.ui-panel').classList.remove('traveling');
-                    
                     const result = this.gameState.completeTravel();
                     this.showNotification(result.message);
-                    
                     if (!this.gameState.currentSystem.discovered) {
                         this.gameState.currentSystem.discovered = true;
                         this.scheduleUpdate();
                     }
-                    
                     let pirateChance = 0.4;
                     if (this.gameState.currentSystem.security === 'low') pirateChance = 0.5;
                     else if (this.gameState.currentSystem.security === 'high') pirateChance = 0.3;
-                    
                     if (Math.random() < pirateChance) {
                         const encounter = this.encounterManager.getRandomEncounter();
                         this.encounterManager.startEncounter(encounter.type);
                     }
-                    
                     this.updateUI();
                 }
             };
-            
             animateTravel();
         });
-        
+
         const refuelBtn = document.getElementById('refuel-btn');
         if (refuelBtn) refuelBtn.addEventListener('click', () => {
             if (!this.gameState.currentSystem.hasRefuel) {
                 this.showNotification("Refuel services not available!");
                 return;
             }
-            
             const result = this.gameState.refuelShip();
             this.showNotification(result.message);
             this.updateUI();
@@ -1060,11 +990,7 @@ export class UI {
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
-                    
-                    document.querySelectorAll('.panel-section').forEach(section => {
-                        section.style.display = 'none';
-                    });
-                    
+                    document.querySelectorAll('.panel-section').forEach(section => section.style.display = 'none');
                     const tabName = tab.dataset.tab;
                     const activeTab = document.querySelector(`.${tabName}-tab`);
                     if (activeTab) activeTab.style.display = 'block';
