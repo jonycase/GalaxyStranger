@@ -56,7 +56,10 @@
     user-select: none;
     
     /* Prevents long-press context menu on iOS */
-    -webkit-touch-callout: none; 
+    -webkit-touch-callout: none;
+    
+    /* CRITICAL: Remove tap highlight on mobile */
+    -webkit-tap-highlight-color: transparent;
 }
 
 body, html {
@@ -91,10 +94,6 @@ body, html {
 ::selection {
     background: var(--accent-primary);
     color: var(--bg-void);
-    -moz-user-select: none;
-    -khtml-user-select: none;
-    -webkit-user-select: none;
-    user-select: none;
 }
 
 /* ==========================================================================
@@ -113,7 +112,7 @@ body, html {
     width: 100%;
     height: 100%;
     flex-direction: row;
-    opacity: 0; /* Hidden initially, faded in via JS */
+    opacity: 0;
     transition: opacity 1s ease-in;
     animation: interfaceFadeIn 1.5s forwards;
 }
@@ -132,8 +131,7 @@ body, html {
     overflow: hidden;
     cursor: grab;
     box-shadow: inset 0 0 50px rgba(0,0,0,0.8);
-    /* Critical for mobile game controls: disables native scrolling/zooming */
-    touch-action: none; 
+    touch-action: none;
     -webkit-user-select: none;
     user-select: none;
 }
@@ -276,15 +274,14 @@ body, html {
     align-items: center;
     cursor: pointer;
     z-index: 45;
-    transition: all 0.2s;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    touch-action: manipulation;
 }
 
-.map-center-btn:active{
-    transform: scale(0.92) !important; /* Visual shrink effect */
-    filter: brightness(1.2); /* Slight flash */
-        /* Critical: Removes 300ms delay on mobile taps */
-    touch-action: manipulation; 
+.map-center-btn:active {
+    transform: scale(0.88);
+    filter: brightness(1.3);
 }
 
 .map-center-btn:hover { 
@@ -362,7 +359,7 @@ body, html {
     font-size: 10px;
     color: var(--accent-secondary);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     text-transform: uppercase;
     letter-spacing: 1px;
     border-bottom: 2px solid transparent;
@@ -371,6 +368,7 @@ body, html {
     flex-direction: column;
     align-items: center;
     gap: 5px;
+    touch-action: manipulation;
 }
 .tab i { font-size: 16px; margin-bottom: 2px; }
 .tab:hover { background: rgba(255,255,255,0.05); color: #fff; }
@@ -378,8 +376,10 @@ body, html {
     color: var(--accent-primary);
     border-bottom: 2px solid var(--accent-primary);
     background: rgba(102, 204, 255, 0.05);
-    transform: scale(0.92) !important; /* Visual shrink effect */
-    filter: brightness(1.2); /* Slight flash */
+}
+.tab:active {
+    transform: scale(0.95);
+    filter: brightness(1.2);
 }
 
 /* --- TAB CONTENT --- */
@@ -404,7 +404,6 @@ body, html {
 }
 
 /* --- STATS GRID --- */
-/* --- STATUS TAB DASHBOARD --- */
 .stats-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -447,47 +446,10 @@ body, html {
     font-family: var(--font-mono);
 }
 
-/* Specific Stat Highlights via ID or Context */
+/* Specific Stat Highlights */
 #hull { color: var(--accent-danger); text-shadow: 0 0 10px rgba(255, 102, 102, 0.3); }
 #credits { color: var(--accent-success); }
 #fuel { color: var(--accent-warning); }
-
-/* --- NAVIGATION COMPUTER PANEL --- */
-.nav-computer {
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid var(--border-dim);
-    border-top: 2px solid var(--accent-primary);
-    border-radius: 0 0 6px 6px;
-    padding: 15px;
-    margin-top: 5px;
-    position: relative;
-}
-
-.nav-computer::before {
-    content: "NAV-COM ONLINE";
-    position: absolute;
-    top: -10px; right: 10px;
-    font-size: 14px;
-    background: var(--bg-panel);
-    padding: 0 5px;
-    color: var(--accent-primary);
-    border: 1px solid var(--border-dim);
-}
-
-.nav-computer .stat {
-    background: transparent;
-    border: none;
-    border-bottom: 1px dashed rgba(255,255,255,0.1);
-    padding: 8px 0;
-    margin: 0;
-    border-radius: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.nav-computer .stat:hover { transform: none; background: transparent; }
-.nav-computer .stat:last-of-type { border-bottom: none; }
-.nav-computer .stat-value { font-size: 13px; }
 
 /* Mobile Control Group in Status Tab */
 .mobile-controls {
@@ -500,15 +462,12 @@ body, html {
 }
 
 /* --- SYSTEM OVERVIEW TAB --- */
-
-/* Main Grid Layout */
 .system-overview-grid {
     display: flex;
     flex-direction: column;
     gap: 15px;
 }
 
-/* Individual Data Cards */
 .system-overview-item {
     background: rgba(19, 20, 31, 0.6);
     border: 1px solid var(--border-dim);
@@ -527,7 +486,6 @@ body, html {
     padding-bottom: 5px;
 }
 
-/* Primary System Header (Top Card) */
 .system-overview-item:first-child {
     background: linear-gradient(90deg, rgba(102, 204, 255, 0.05) 0%, transparent 100%);
     border-left: 3px solid var(--accent-primary);
@@ -542,28 +500,11 @@ body, html {
     text-shadow: 0 0 10px rgba(102, 204, 255, 0.2);
 }
 
-/* Data Rows inside Cards */
-.system-overview-item div[id^="overview-"], 
-.system-overview-item div[id^="current-"] {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    padding: 4px 0;
-    color: #ccc;
-}
-
-/* Add labels via CSS to keep HTML clean? Or assume HTML has structure.
-   Assuming HTML is simple text like "Economy: Mining", lets style the value if we can,
-   but simplified: just consistent row spacing.
-*/
-
-/* Threat Level Styling */
 #overview-threat {
     font-weight: bold;
     color: var(--accent-danger);
 }
 
-/* Nearby Systems List */
 #nearby-systems {
     display: flex;
     flex-direction: column;
@@ -574,7 +515,6 @@ body, html {
     padding-right: 5px;
 }
 
-/* Nearby System Item */
 #nearby-systems .system-overview-item {
     padding: 10px;
     background: rgba(255,255,255,0.02);
@@ -589,7 +529,6 @@ body, html {
     transform: translateX(4px);
 }
 
-/* Custom Scrollbar for the list */
 #nearby-systems::-webkit-scrollbar { width: 4px; }
 #nearby-systems::-webkit-scrollbar-thumb { background: #333; }
 
@@ -616,39 +555,10 @@ body, html {
     border-bottom: 1px solid rgba(255,255,255,0.03);
     font-size: 12px;
 }
-/* Market Controls */
-.market-controls {
-    display: flex;
-    align-items: center;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border-dim);
-        /* Critical: Removes 300ms delay on mobile taps */
-    touch-action: manipulation; 
-}
 
-.market-controls button {
-    margin-right: 5px;
-    padding: 4px 12px;
-    min-width: 40px;
-        /* Critical: Removes 300ms delay on mobile taps */
-    touch-action: manipulation; 
-}
-
-/* Small helper for buttons */
-.btn.small {
-    padding: 4px 10px;
-    font-size: 11px;
-}
 /* ==========================================================================
-   7. THE ENCOUNTER MODAL (CRITICAL FIXES & STYLES)
+   7. THE ENCOUNTER MODAL
    ========================================================================== */
-
-/* 
-   The Overlay: 
-   Fixed positioning + Flex centering ensures the modal is always visible 
-   and centered, regardless of scrolling or screen size.
-*/
 .modal-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -656,44 +566,32 @@ body, html {
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
     z-index: var(--z-modal-backdrop);
-    
-    /* Centering Magic */
     display: flex;
     justify-content: center;
     align-items: center;
-    
-    opacity: 0; /* Handled by JS fade-in */
+    opacity: 0;
     transition: opacity 0.3s ease-in-out;
 }
 
-/* 
-   The Container:
-   The actual window for the encounter content.
-*/
 .encounter-container {
     background: #151621;
     width: 90%;
     max-width: 600px;
-    max-height: 90vh; /* Prevent running off screen vertically */
-    overflow-y: auto; /* Scroll internally if content is huge */
-    
+    max-height: 90vh;
+    overflow-y: auto;
     border: 1px solid var(--border-light);
     box-shadow: 0 0 50px rgba(0,0,0,0.8), 0 0 15px rgba(100,100,100,0.1);
     border-radius: 12px;
-    padding: 0; /* Padding handled by internal sections */
+    padding: 0;
     position: relative;
-    
-    /* Entry Animation */
     transform: scale(0.95);
     transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* If the modal is visible (controlled by JS adding classes or inline styles usually, but here relying on parent opacity transition) */
 .modal-overlay[style*="opacity: 1"] .encounter-container {
     transform: scale(1);
 }
 
-/* --- Encounter Header --- */
 .encounter-header {
     background: rgba(0,0,0,0.2);
     padding: 20px;
@@ -713,7 +611,6 @@ body, html {
     font-weight: 700;
 }
 
-/* --- Encounter Content Area --- */
 .encounter-body {
     padding: 25px;
     font-size: 15px;
@@ -722,7 +619,6 @@ body, html {
     min-height: 100px;
 }
 
-/* --- Combat Log Area --- */
 .combat-log {
     background: #000;
     border-top: 1px solid var(--border-dim);
@@ -736,7 +632,6 @@ body, html {
     box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
 }
 
-/* --- Action Buttons Area --- */
 .combat-options {
     padding: 20px;
     background: rgba(0,0,0,0.2);
@@ -758,13 +653,14 @@ body, html {
     font-size: 12px;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 8px;
     position: relative;
     overflow: hidden;
+    touch-action: manipulation;
 }
 
 .combat-btn:hover {
@@ -774,12 +670,8 @@ body, html {
 }
 
 .combat-btn:active {
-    transform: translateY(0);
-        /* Critical: Removes 300ms delay on mobile taps */
-    touch-action: manipulation; 
-      /* Smooth animation for the press effect */
-    transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1), 
-                filter 0.1s ease;
+    transform: scale(0.92);
+    filter: brightness(1.3);
 }
 
 .combat-btn:disabled {
@@ -789,7 +681,6 @@ body, html {
     filter: grayscale(1);
 }
 
-/* Button Variants */
 .combat-btn.attack { border-bottom: 3px solid var(--accent-danger); }
 .combat-btn.attack:hover { background: rgba(255, 102, 102, 0.1); color: #fff; box-shadow: 0 0 15px rgba(255, 102, 102, 0.2); }
 
@@ -798,7 +689,6 @@ body, html {
 
 .combat-btn.escape { border-bottom: 3px solid var(--accent-warning); }
 .combat-btn.escape:hover { background: rgba(255, 204, 102, 0.1); color: #fff; box-shadow: 0 0 15px rgba(255, 204, 102, 0.2); }
-
 
 /* ==========================================================================
    8. START SCREEN & INITIALIZATION
@@ -860,13 +750,18 @@ body, html {
     border-radius: 8px;
     cursor: pointer;
     text-align: center;
-    transition: all 0.2s;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    touch-action: manipulation;
 }
 .size-option:hover { background: rgba(255,255,255,0.05); }
 .size-option.selected {
     border-color: var(--accent-primary);
     background: rgba(102, 204, 255, 0.1);
     box-shadow: 0 0 20px rgba(102, 204, 255, 0.2);
+}
+.size-option:active {
+    transform: scale(0.95);
+    filter: brightness(1.2);
 }
 .size-option .icon { font-size: 24px; margin-bottom: 10px; color: var(--accent-secondary); }
 .size-option.selected .icon { color: var(--accent-primary); }
@@ -883,16 +778,14 @@ body, html {
     letter-spacing: 2px;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 0 20px rgba(102, 204, 255, 0.4);
+    touch-action: manipulation;
 }
 
 .btn-action:active {
-      /* Smooth animation for the press effect */
-          /* Critical: Removes 300ms delay on mobile taps */
-    touch-action: manipulation; 
-    transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1), 
-                filter 0.1s ease;
+    transform: scale(0.95);
+    filter: brightness(1.3);
 }
 
 .btn-action:hover {
@@ -904,7 +797,6 @@ body, html {
 /* ==========================================================================
    9. ANIMATIONS
    ========================================================================== */
-
 @keyframes pulse {
     0% { opacity: 0.6; }
     50% { opacity: 1; }
@@ -952,48 +844,7 @@ body, html {
 }
 
 /* ==========================================================================
-   11. RESPONSIVE MEDIA QUERIES
-   ========================================================================== */
-
-/* Tablet & Smaller Desktop */
-@media (max-width: 1024px) {
-    :root { --panel-width: 300px; }
-}
-
-/* Mobile Devices */
-@media (max-width: 768px) {
-    .app-container { flex-direction: column; }
-    .game-interface { flex-direction: column; }
-    
-    .map-container { flex: 2; height: 50vh; order: 1; }
-    .ui-panel { 
-        width: 100%; 
-        height: 50vh; 
-        order: 2; 
-        border-left: none; 
-        border-top: 1px solid var(--border-light);
-    }
-    
-    .encounter-container {
-        width: 95%;
-        max-height: 85vh;
-    }
-    
-    .combat-options {
-        grid-template-columns: 1fr; /* Stack buttons on mobile */
-    }
-    
-    .game-title { font-size: 2.5rem; }
-    .subtitle { font-size: 0.9rem; letter-spacing: 4px; }
-}
-
-/* Ultrawide Fixes */
-@media (min-width: 2000px) {
-    :root { --panel-width: 500px; }
-    body { font-size: 16px; }
-}
-/* ==========================================================================
-   12. GAME OVER SCREEN
+   11. GAME OVER SCREEN
    ========================================================================== */
 .game-over-screen {
     position: fixed;
@@ -1020,7 +871,6 @@ body, html {
     overflow: hidden;
 }
 
-/* "Scanline" failure effect */
 .game-over-box::before {
     content: "";
     position: absolute;
@@ -1085,7 +935,7 @@ body, html {
 }
 
 /* ==========================================================================
-   13. FULL GALAXY MAP MODAL
+   12. FULL GALAXY MAP MODAL
    ========================================================================== */
 .galaxy-map-modal {
     position: fixed;
@@ -1112,7 +962,6 @@ body, html {
     position: relative;
 }
 
-/* Header Bar */
 .map-header {
     height: 60px;
     padding: 0 25px;
@@ -1135,14 +984,12 @@ body, html {
 }
 .map-header h2 i { opacity: 0.7; }
 
-/* Canvas Area */
 .map-canvas-wrapper {
     flex: 1;
     position: relative;
     background: radial-gradient(circle at center, #111 0%, #000 100%);
     overflow: hidden;
-        /* Critical for mobile game controls: disables native scrolling/zooming */
-    touch-action: none; 
+    touch-action: none;
     -webkit-user-select: none;
     user-select: none;
 }
@@ -1151,17 +998,15 @@ body, html {
     width: 100%;
     height: 100%;
     cursor: crosshair;
-        /* Critical for mobile game controls: disables native scrolling/zooming */
-    touch-action: none; 
+    touch-action: none;
     -webkit-user-select: none;
     user-select: none;
 }
 
-/* Map Overlays (Search & Info) */
 .map-controls-overlay {
     position: absolute;
     top: 20px; left: 20px;
-    pointer-events: none; /* Let clicks pass to canvas */
+    pointer-events: none;
     display: flex;
     flex-direction: column;
     gap: 15px;
@@ -1196,18 +1041,23 @@ body, html {
     padding: 0 15px;
     cursor: pointer;
     transition: color 0.2s;
+    touch-action: manipulation;
 }
 #map-search-btn:hover { color: #fff; }
+#map-search-btn:active {
+    transform: scale(0.92);
+    filter: brightness(1.3);
+}
 
 .map-info-box {
     pointer-events: auto;
     background: rgba(11, 12, 21, 0.95);
-    border: 1px solid var(--accent-warning); /* Gold border for selection */
+    border: 1px solid var(--accent-warning);
     border-left: 4px solid var(--accent-warning);
     padding: 20px;
     border-radius: 4px;
     width: 280px;
-    display: none; /* Hidden until selection */
+    display: none;
     flex-direction: column;
     gap: 15px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.8);
@@ -1225,112 +1075,37 @@ body, html {
     padding-bottom: 5px;
 }
 
-.info-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 4px;
-    font-size: 12px;
-}
-.info-label { color: #888; }
-.info-val { color: #fff; font-weight: bold; }
-
 @keyframes slideInLeft {
     from { opacity: 0; transform: translateX(-20px); }
     to { opacity: 1; transform: translateX(0); }
 }
 
 /* ==========================================================================
-   14. DYNAMIC ENCOUNTER THEMES
-   Classes to be toggled on .encounter-container based on type
+   13. GENERIC UI COMPONENTS (Buttons, Inputs, Cards)
    ========================================================================== */
 
-/* Pirate Theme (Red/Gritty) */
-.theme-pirate .encounter-container {
-    border-color: var(--accent-danger);
-    box-shadow: 0 0 50px rgba(255, 102, 102, 0.2);
-}
-.theme-pirate .encounter-header { color: var(--accent-danger); border-bottom-color: rgba(255, 102, 102, 0.3); }
-
-/* Police Theme (Blue/Clean) */
-.theme-police .encounter-container {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 50px rgba(102, 204, 255, 0.2);
-}
-.theme-police .encounter-header { color: var(--accent-primary); border-bottom-color: rgba(102, 204, 255, 0.3); }
-
-/* Anomaly Theme (Purple/Ethereal) */
-.theme-anomaly .encounter-container {
-    border-color: var(--accent-rare);
-    box-shadow: 0 0 50px rgba(176, 136, 255, 0.2);
-}
-.theme-anomaly .encounter-header { color: var(--accent-rare); border-bottom-color: rgba(176, 136, 255, 0.3); }
-
-/* Hazard Theme (Orange/Warning) */
-.theme-hazard .encounter-container {
-    border-color: var(--accent-warning);
-    box-shadow: 0 0 50px rgba(255, 204, 102, 0.2);
-}
-.theme-hazard .encounter-header { color: var(--accent-warning); border-bottom-color: rgba(255, 204, 102, 0.3); }
-
-/* ==========================================================================
-   15. HELPER CLASSES
-   For dynamic HTML injection via JS
-   ========================================================================== */
-.text-success { color: var(--accent-success) !important; }
-.text-danger { color: var(--accent-danger) !important; }
-.text-warning { color: var(--accent-warning) !important; }
-.text-info { color: var(--accent-primary) !important; }
-.text-muted { color: var(--accent-secondary) !important; }
-
-.blink { animation: blinkAnim 1s infinite; }
-
-@keyframes blinkAnim {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-/* Button close on map */
-.close-map-btn {
-    background: transparent;
-    border: 1px solid var(--border-dim);
-    color: var(--accent-secondary);
-    width: 32px; height: 32px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.close-map-btn:hover {
-    border-color: var(--accent-danger);
-    color: var(--accent-danger);
-    transform: rotate(90deg);
-}
-/* ==========================================================================
-   16. GENERIC UI COMPONENTS (Buttons, Inputs, Cards)
-   ========================================================================== */
-
-/* --- Standard Action Buttons (Used in Panels) --- */
+/* --- Standard Action Buttons --- */
 .btn {
     display: inline-flex;
     justify-content: center;
     align-items: center;
     gap: 8px;
-    padding: 10px 16px;
+    padding: 12px 18px;
     background: rgba(255,255,255,0.05);
     border: 1px solid var(--border-light);
     color: #e0e0e0;
     font-family: var(--font-main);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1), 
-        background-color 0.2s ease, 
-        box-shadow 0.2s ease;
+    touch-action: manipulation;
+    min-height: 44px;
 }
 
 .btn:hover {
@@ -1342,9 +1117,9 @@ body, html {
 }
 
 .btn:active {
+    transform: scale(0.92);
+    filter: brightness(1.3);
     box-shadow: none;
-    transform: scale(0.92) !important; /* Visual shrink effect */
-    filter: brightness(1.2); /* Slight flash */
 }
 
 .btn:disabled {
@@ -1355,24 +1130,36 @@ body, html {
     pointer-events: none;
 }
 
-/* --- Primary Action (Engage/Start) --- */
+/* --- Small Buttons --- */
+.btn.small {
+    padding: 8px 12px;
+    font-size: 11px;
+    min-height: 38px;
+}
 
-/* --- START OF FILE styles.css --- */
+/* --- Mobile Button Variant --- */
+.mobile-btn {
+    min-height: 48px;
+    padding: 14px 20px;
+    font-size: 13px;
+}
 
-/* ... existing styles ... */
-
-/* Scan Button Style */
+/* --- Scan Button Style --- */
 .btn-scan {
     background: rgba(176, 136, 255, 0.1);
-    border-color: var(--accent-rare); /* Purple */
+    border-color: var(--accent-rare);
     color: var(--accent-rare);
-    transition: all 0.3s ease;
 }
 
 .btn-scan:hover {
     background: var(--accent-rare);
     color: #000;
     box-shadow: 0 0 15px rgba(176, 136, 255, 0.4);
+}
+
+.btn-scan:active {
+    transform: scale(0.92);
+    filter: brightness(1.3);
 }
 
 .btn-scan i {
@@ -1385,22 +1172,12 @@ body, html {
     100% { transform: scale(1); opacity: 1; }
 }
 
-.btn-action {
-    background: var(--accent-primary);
-    color: #0b0c15;
-    border: none;
-    font-weight: 800;
-}
-.btn-action:hover {
-    background: #fff;
-    box-shadow: 0 0 20px rgba(102, 204, 255, 0.4);
-}
-
 /* --- Trade Buttons (Buy/Sell) --- */
 .btn-buy, .btn-sell {
-    padding: 4px 8px;
-    font-size: 10px;
-    min-width: 60px;
+    padding: 8px 12px;
+    font-size: 11px;
+    min-width: 70px;
+    min-height: 38px;
 }
 
 .btn-buy {
@@ -1412,6 +1189,10 @@ body, html {
     border-color: var(--accent-success);
     box-shadow: 0 0 10px rgba(102, 255, 153, 0.2);
 }
+.btn-buy:active {
+    transform: scale(0.90);
+    filter: brightness(1.3);
+}
 
 .btn-sell {
     border-color: rgba(255, 102, 102, 0.3);
@@ -1422,36 +1203,69 @@ body, html {
     border-color: var(--accent-danger);
     box-shadow: 0 0 10px rgba(255, 102, 102, 0.2);
 }
+.btn-sell:active {
+    transform: scale(0.90);
+    filter: brightness(1.3);
+}
 
-/* --- Close Button (Icon Only) --- */
+/* --- Close Button --- */
 .btn-close {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
     padding: 0;
     border-radius: 50%;
     border: 1px solid transparent;
     background: transparent;
     color: #888;
     font-size: 16px;
+    touch-action: manipulation;
 }
 .btn-close:hover {
     color: #fff;
     background: rgba(255,255,255,0.1);
 }
+.btn-close:active {
+    transform: scale(0.88);
+    filter: brightness(1.3);
+}
 
+.close-map-btn {
+    background: transparent;
+    border: 1px solid var(--border-dim);
+    color: var(--accent-secondary);
+    width: 32px; 
+    height: 32px;
+    min-height: 32px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    touch-action: manipulation;
+}
+.close-map-btn:hover {
+    border-color: var(--accent-danger);
+    color: var(--accent-danger);
+    transform: rotate(90deg);
+}
+.close-map-btn:active {
+    transform: rotate(90deg) scale(0.88);
+    filter: brightness(1.3);
+}
+
+/* ==========================================================================
+   14. TAB SPECIFIC LAYOUTS (Cargo, Contracts, Shipyard)
+   ========================================================================== */
+
+/* --- Cargo Grid --- */
 .cargo-item {
     display: grid;
-    grid-template-columns: 2fr 0.5fr 1.5fr; /* Adjusted columns */
+    grid-template-columns: 2fr 0.5fr 1.5fr;
     gap: 10px;
-    padding: 10px 0;
+    padding: 12px 0;
     border-bottom: 1px solid rgba(255,255,255,0.05);
     align-items: center;
     font-size: 13px;
 }
-
-/* ==========================================================================
-   17. TAB SPECIFIC LAYOUTS (Contracts, Shipyard)
-   ========================================================================== */
 
 /* --- Contract Cards --- */
 .contract-item {
@@ -1494,19 +1308,25 @@ body, html {
 
 .contract-button {
     width: 100%;
-    padding: 8px;
-    font-size: 11px;
+    padding: 10px;
+    font-size: 12px;
+    min-height: 44px;
     border-color: var(--accent-primary);
     color: var(--accent-primary);
     background: rgba(102, 204, 255, 0.05);
+    touch-action: manipulation;
 }
 .contract-button:hover {
     background: var(--accent-primary);
     color: #000;
 }
+.contract-button:active {
+    transform: scale(0.95);
+    filter: brightness(1.3);
+}
 
 /* ==========================================================================
-   SHIPYARD & SHIP VIEW STYLES
+   15. SHIPYARD & SHIP VIEW STYLES
    ========================================================================== */
 
 .ship-overview-panel {
@@ -1522,7 +1342,6 @@ body, html {
     overflow: hidden;
 }
 
-/* Decorative grid background */
 .ship-overview-panel::before {
     content: "";
     position: absolute;
@@ -1565,7 +1384,6 @@ body, html {
     text-transform: uppercase;
 }
 
-/* Detailed Stats Section */
 .ship-stats-detailed {
     width: 100%;
     z-index: 2;
@@ -1618,7 +1436,6 @@ body, html {
     font-weight: 800;
 }
 
-/* Mini Grid for secondary stats */
 .stat-grid-small {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1640,7 +1457,7 @@ body, html {
 }
 .mini-stat i { color: var(--accent-primary); width: 15px; text-align: center; }
 
-/* Upgrade List Styling */
+/* --- Upgrade List --- */
 .upgrade-list {
     display: flex;
     flex-direction: column;
@@ -1652,9 +1469,10 @@ body, html {
     align-items: center;
     background: rgba(20, 25, 35, 0.8);
     border: 1px solid var(--border-dim);
-    padding: 10px;
+    padding: 12px;
     border-radius: 6px;
-    transition: all 0.2s;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    touch-action: manipulation;
 }
 
 .upgrade-item:hover {
@@ -1685,7 +1503,7 @@ body, html {
 
 .upgrade-action {
     text-align: right;
-    min-width: 70px;
+    min-width: 80px;
 }
 
 .upgrade-cost {
@@ -1694,7 +1512,16 @@ body, html {
     margin-bottom: 5px;
 }
 
-/* No Service Message */
+.upgrade-action .btn {
+    min-height: 38px;
+    padding: 8px 14px;
+}
+
+.upgrade-action .btn:active {
+    transform: scale(0.90);
+    filter: brightness(1.3);
+}
+
 .no-service-msg {
     text-align: center;
     padding: 40px 20px;
@@ -1706,10 +1533,22 @@ body, html {
 .no-service-msg p { font-weight: bold; margin-bottom: 5px; }
 
 /* ==========================================================================
-   18. UTILITY ANIMATIONS & EFFECTS
+   16. UTILITY CLASSES & ANIMATIONS
    ========================================================================== */
 
-/* Blinking Cursor for Terminal Logs */
+.text-success { color: var(--accent-success) !important; }
+.text-danger { color: var(--accent-danger) !important; }
+.text-warning { color: var(--accent-warning) !important; }
+.text-info { color: var(--accent-primary) !important; }
+.text-muted { color: var(--accent-secondary) !important; }
+
+.blink { animation: blinkAnim 1s infinite; }
+
+@keyframes blinkAnim {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 .cursor-blink {
     display: inline-block;
     width: 6px;
@@ -1720,19 +1559,11 @@ body, html {
     margin-left: 2px;
 }
 
-.unselectable {
-  -moz-user-select: none;
-  -khtml-user-select: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
 @keyframes blinkCursor {
     0% { opacity: 1; }
     100% { opacity: 0; }
 }
 
-/* Pulse Animation for Critical UI */
 .pulse-alert {
     animation: pulseRed 2s infinite;
 }
@@ -1742,9 +1573,235 @@ body, html {
     100% { box-shadow: 0 0 0 0 rgba(255, 102, 102, 0); }
 }
 
+.unselectable {
+    -moz-user-select: none;
+    -khtml-user-select: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
 /* ==========================================================================
-   19. MOBILE ADJUSTMENTS FOR MODALS & BUTTONS
+   17. DYNAMIC ENCOUNTER THEMES
    ========================================================================== */
-@media (max-width: 600px) {
-    /* Make buttons big
+
+.theme-pirate .encounter-container {
+    border-color: var(--accent-danger);
+    box-shadow: 0 0 50px rgba(255, 102, 102, 0.2);
+}
+.theme-pirate .encounter-header { color: var(--accent-danger); border-bottom-color: rgba(255, 102, 102, 0.3); }
+
+.theme-police .encounter-container {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 50px rgba(102, 204, 255, 0.2);
+}
+.theme-police .encounter-header { color: var(--accent-primary); border-bottom-color: rgba(102, 204, 255, 0.3); }
+
+.theme-anomaly .encounter-container {
+    border-color: var(--accent-rare);
+    box-shadow: 0 0 50px rgba(176, 136, 255, 0.2);
+}
+.theme-anomaly .encounter-header { color: var(--accent-rare); border-bottom-color: rgba(176, 136, 255, 0.3); }
+
+.theme-hazard .encounter-container {
+    border-color: var(--accent-warning);
+    box-shadow: 0 0 50px rgba(255, 204, 102, 0.2);
+}
+.theme-hazard .encounter-header { color: var(--accent-warning); border-bottom-color: rgba(255, 204, 102, 0.3); }
+
+/* ==========================================================================
+   18. RESPONSIVE MEDIA QUERIES
+   ========================================================================== */
+
+/* Tablet & Smaller Desktop */
+@media (max-width: 1024px) {
+    :root { --panel-width: 300px; }
+}
+
+/* Mobile Devices */
+@media (max-width: 768px) {
+    .app-container { flex-direction: column; }
+    .game-interface { flex-direction: column; }
     
+    .map-container { flex: 2; height: 50vh; order: 1; }
+    .ui-panel { 
+        width: 100%; 
+        height: 50vh; 
+        order: 2; 
+        border-left: none; 
+        border-top: 1px solid var(--border-light);
+    }
+    
+    .encounter-container {
+        width: 95%;
+        max-height: 85vh;
+    }
+    
+    .combat-options {
+        grid-template-columns: 1fr;
+    }
+    
+    .combat-btn {
+        padding: 18px 12px;
+        font-size: 14px;
+        min-height: 52px;
+    }
+    
+    .game-title { font-size: 2.5rem; }
+    .subtitle { font-size: 0.9rem; letter-spacing: 4px; }
+    
+    /* Make all interactive elements bigger on mobile */
+    .btn {
+        min-height: 48px;
+        padding: 14px 18px;
+        font-size: 14px;
+    }
+    
+    .btn.small {
+        min-height: 44px;
+        padding: 12px 16px;
+        font-size: 12px;
+    }
+    
+    .btn-buy, .btn-sell {
+        min-height: 44px;
+        padding: 10px 14px;
+        font-size: 12px;
+        min-width: 80px;
+    }
+    
+    .market-grid {
+        grid-template-columns: 2fr 1fr 1fr 0.8fr 1.3fr;
+        gap: 8px;
+    }
+    
+    .tab {
+        padding: 18px 12px;
+        min-height: 56px;
+    }
+    
+    .upgrade-action .btn {
+        min-height: 44px;
+    }
+    
+    .contract-button {
+        min-height: 48px;
+        padding: 14px;
+        font-size: 13px;
+    }
+}
+
+/* Small Mobile (< 400px) */
+@media (max-width: 400px) {
+    .market-grid {
+        font-size: 11px;
+    }
+    
+    .btn-buy, .btn-sell {
+        font-size: 10px;
+        padding: 8px 10px;
+        min-width: 65px;
+    }
+    
+    .tab {
+        font-size: 9px;
+        padding: 16px 8px;
+    }
+    
+    .tab i {
+        font-size: 14px;
+    }
+}
+
+/* Ultrawide Fixes */
+@media (min-width: 2000px) {
+    :root { --panel-width: 500px; }
+    body { font-size: 16px; }
+}
+
+/* ==========================================================================
+   19. SHIP UPGRADE CARDS (Additional Styling)
+   ========================================================================== */
+
+.ship-shop {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+.upgrade-card {
+    background: rgba(20, 25, 35, 0.6);
+    border: 1px solid var(--border-dim);
+    border-radius: 6px;
+    padding: 15px;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.upgrade-card:hover {
+    border-color: var(--border-light);
+    background: rgba(20, 25, 35, 0.8);
+    transform: translateX(3px);
+}
+
+.upgrade-header {
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.upgrade-card button {
+    min-height: 40px;
+    touch-action: manipulation;
+}
+
+.upgrade-card button:active {
+    transform: scale(0.92);
+    filter: brightness(1.3);
+}
+
+/* ==========================================================================
+   20. FINAL MOBILE TOUCH OPTIMIZATIONS
+   ========================================================================== */
+
+@media (hover: none) and (pointer: coarse) {
+    /* This targets touch devices specifically */
+    
+    /* Remove hover states that don't work well on touch */
+    .btn:hover,
+    .combat-btn:hover,
+    .tab:hover,
+    .contract-item:hover,
+    .upgrade-item:hover {
+        transform: none;
+    }
+    
+    /* Ensure all tappable elements are at least 44x44px (Apple HIG) */
+    button,
+    .btn,
+    .tab,
+    input[type="button"],
+    input[type="submit"],
+    a.btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    /* Increase spacing for fat fingers */
+    .market-grid {
+        gap: 12px;
+    }
+    
+    .combat-options {
+        gap: 18px;
+    }
+    
+    /* Make scrollable areas more obvious */
+    .tab-content {
+        padding: 16px;
+    }
+}
+
+/* END OF FILE */

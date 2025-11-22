@@ -281,10 +281,7 @@ export class GalaxyMap {
                                     let color;
 
                                     // 1. Determine Base Color
-                                    if (isCurrent) {
-                                        color = '#00ff00';
-                                    } 
-                                    else if (isSelected && this.isModal) {
+                                    if (isSelected && this.isModal) {
                                         color = '#ffcc00';
                                     } 
                                     else if (sys.discovered) {
