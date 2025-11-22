@@ -48,7 +48,15 @@
     padding: 0;
     box-sizing: border-box;
     outline: none;
-    -webkit-tap-highlight-color: transparent;
+    
+    /* CRITICAL FOR GAMES: Prevents text selection/highlighting on rapid taps */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    
+    /* Prevents long-press context menu on iOS */
+    -webkit-touch-callout: none; 
 }
 
 body, html {
@@ -884,7 +892,7 @@ body, html {
           /* Critical: Removes 300ms delay on mobile taps */
     touch-action: manipulation; 
     transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1), 
-        filter 0.1s ease;
+                filter 0.1s ease;
 }
 
 .btn-action:hover {
