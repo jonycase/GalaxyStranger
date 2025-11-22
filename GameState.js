@@ -1,3 +1,5 @@
+
+
 import { 
     EconomyProfiles, 
     CustomSystems, 
@@ -13,6 +15,8 @@ export class GameState {
         this.maxFuel = 15;
         this.cargo = [];
         this.cargoCapacity = 50;
+        
+        // Ship State
         this.ship = {
             x: 0,
             y: 0,
@@ -27,11 +31,15 @@ export class GameState {
             shields: 20,
             engine: 1,
             rotation: 0,
-            radar: 0
+            radar: 0,
+            upgrades: {} // Stores upgrade counts
         };
 
+        // Navigation State
         this.currentSystem = null;
         this.targetSystem = null;
+        
+        // Galaxy Data
         this.galaxy = [];
         this.galaxySize = 200;
         this.galaxyWidth = 800;
@@ -39,6 +47,7 @@ export class GameState {
         this.galaxyShape = 'balanced';
         this.minDistance = 30;
 
+        // Statistics & Time
         this.totalDaysTraveled = 0;
         this.distanceTraveled = 0;
         this.systemsVisited = 0;
@@ -47,8 +56,20 @@ export class GameState {
         this.fullRestockIntervalMin = 11;
         this.fullRestockIntervalMax = 14;
         this.bounty = 0;
+        this.gameOver = false;
+
+        // Content Data
         this.contracts = [];
-        this.upgrades = [];
+        this.upgrades = [
+            { id: 'hull', name: 'Reinforced Hull', description: 'Increases hull strength', cost: 5000, effect: 10, icon: 'fas fa-shield-alt' },
+            { id: 'weapons', name: 'Plasma Cannons', description: 'Increases weapon damage', cost: 3500, effect: 5, icon: 'fas fa-gem' },
+            { id: 'engine', name: 'Quantum Engine', description: 'Increases evasion chance', cost: 2500, effect: 5, icon: 'fas fa-tachometer-alt' },
+            { id: 'shields', name: 'Deflector Shields', description: 'Increases shield strength', cost: 3500, effect: 10, icon: 'fas fa-atom' },
+            { id: 'cargo', name: 'Expanded Cargo', description: 'Increases cargo capacity', cost: 2500, effect: 10, icon: 'fas fa-boxes' },
+            { id: 'fuel', name: 'Fuel Tanks', description: 'Increases fuel capacity', cost: 2500, effect: 5, icon: 'fas fa-gas-pump' },
+            { id: 'radar', name: 'Long-Range Radar', description: 'Allows scanning nearby systems', cost: 5000, effect: 15, icon: 'fas fa-satellite' }
+        ];
+        
         this.goods = [
             { id: 'food', name: 'Food Rations', basePrice: 10, volatility: 3, production: ['agricultural'], illegal: false },
             { id: 'water', name: 'Water', basePrice: 5, volatility: 2, production: ['agricultural', 'mining'], illegal: false },
@@ -70,29 +91,6 @@ export class GameState {
         this.economyTypes = Object.keys(EconomyProfiles);
         this.techLevels = ['none', 'low', 'medium', 'high'];
         this.securityLevels = ['none', 'low', 'medium', 'high'];
-        
-        this.upgrades = [
-            { id: 'hull', name: 'Reinforced Hull', description: 'Increases hull strength', cost: 5000, effect: 10, icon: 'fas fa-shield-alt' },
-            { id: 'weapons', name: 'Plasma Cannons', description: 'Increases weapon damage', cost: 3500, effect: 5, icon: 'fas fa-gem' },
-            { id: 'engine', name: 'Quantum Engine', description: 'Increases evasion chance', cost: 2500, effect: 5, icon: 'fas fa-tachometer-alt' },
-            { id: 'shields', name: 'Deflector Shields', description: 'Increases shield strength', cost: 3500, effect: 10, icon: 'fas fa-atom' },
-            { id: 'cargo', name: 'Expanded Cargo', description: 'Increases cargo capacity', cost: 2500, effect: 10, icon: 'fas fa-boxes' },
-            { id: 'fuel', name: 'Fuel Tanks', description: 'Increases fuel capacity', cost: 2500, effect: 5, icon: 'fas fa-gas-pump' },
-            { id: 'radar', name: 'Long-Range Radar', description: 'Allows scanning nearby systems', cost: 5000, effect: 15, icon: 'fas fa-satellite' }
-        ];
-        
-        this.encounters = [
-            { type: 'pirate', name: 'Pirate Attack', weight: 30 },
-            { type: 'police', name: 'Police Inspection', weight: 30 },
-            { type: 'trader', name: 'Wandering Trader', weight: 10 },
-            { type: 'debris', name: 'Space Debris Field', weight: 15 },
-            { type: 'distress', name: 'Distress Signal', weight: 10 },
-            { type: 'anomaly', name: 'Spatial Anomaly', weight: 10 }
-        ];
-        
-        this.distanceTraveled = 0;
-        this.systemsVisited = 1;
-        this.gameOver = false;
     }
 
     initGame(size, callback) {
@@ -100,6 +98,7 @@ export class GameState {
         this.calculateGalaxyDimensions();
         this.showLoadingScreen();
 
+        // Defer generation to next tick to allow UI to render loading screen
         setTimeout(async () => {
             await this.generateGalaxy();
             this.generateContracts();
@@ -109,20 +108,27 @@ export class GameState {
     }
 
     calculateGalaxyDimensions() {
+        // Adjust dimensions based on size to maintain density
+        // We scale the world space so the "density" of stars remains somewhat consistent
+        // preventing overcrowding in small maps or emptiness in large ones.
+        const baseScale = Math.sqrt(this.galaxySize / 200);
+        
         switch (this.galaxyShape) {
             case 'wide':
-                this.galaxyWidth = 800 + this.galaxySize;
-                this.galaxyHeight = 400 + this.galaxySize * 0.3;
+                this.galaxyWidth = Math.floor(800 * baseScale * 1.5);
+                this.galaxyHeight = Math.floor(500 * baseScale * 0.6);
                 break;
             case 'tall':
-                this.galaxyWidth = 500 + this.galaxySize;
-                this.galaxyHeight = 700 + this.galaxySize * 0.7;
+                this.galaxyWidth = Math.floor(500 * baseScale * 0.6);
+                this.galaxyHeight = Math.floor(800 * baseScale * 1.5);
                 break;
             default: // balanced
-                this.galaxyWidth = 600 + this.galaxySize;
-                this.galaxyHeight = 500 + this.galaxySize * 0.5;
+                this.galaxyWidth = Math.floor(800 * baseScale);
+                this.galaxyHeight = Math.floor(600 * baseScale);
         }
-        this.minDistance = 30 * Math.sqrt(40 / Math.max(40, this.galaxySize));
+        
+        // Minimum distance decreases slightly as galaxy gets denser to allow packing
+        this.minDistance = Math.max(15, 30 - (Math.log10(this.galaxySize) * 5));
     }
 
     showLoadingScreen() {
@@ -148,14 +154,16 @@ export class GameState {
         const names = new Set(CustomSystems.map(sys => sys.name));
         const nameCount = this.galaxySize + CustomSystems.length;
 
+        // Generate names pool first
         while (names.size < nameCount) {
             names.add(generateSystemName());
         }
         const nameArray = Array.from(names);
 
+        // Spatial index for generation (simple grid for distance checks)
         const points = [];
-        const minDist = this.minDistance;
-
+        
+        // 1. Place Custom Systems
         CustomSystems.forEach((customSystem, idx) => {
             const pos = {
                 x: (typeof customSystem.x === 'number') ? customSystem.x : Math.random() * this.galaxyWidth,
@@ -177,15 +185,19 @@ export class GameState {
             this.galaxy.push(sys);
         });
 
+        // 2. Batch Generate Procedural Systems
         const totalToCreate = Math.max(0, this.galaxySize - CustomSystems.length);
-        const chunkSize = Math.max(20, Math.floor(totalToCreate / 40));
+        
+        // Process in chunks to keep UI responsive during large generations (e.g. 48k stars)
+        const chunkSize = 500; 
         let created = 0;
         let nextId = CustomSystems.length;
 
         while (created < totalToCreate) {
             const end = Math.min(created + chunkSize, totalToCreate);
+            
             for (let c = created; c < end; c++, nextId++) {
-                const position = generatePosition(this.galaxyWidth, this.galaxyHeight, minDist, points);
+                const position = generatePosition(this.galaxyWidth, this.galaxyHeight, this.minDistance, points);
                 const economy = this.selectWeightedEconomy();
                 const profile = EconomyProfiles[economy] || {};
 
@@ -208,17 +220,23 @@ export class GameState {
                 };
 
                 if (system.hasMarket) this.generateMarket(system);
+                
+                // Only keep last 2000 points for collision checking to speed up massive generation
+                // The spatial randomness ensures we don't overlap too badly even with partial checking
                 points.push({ x: system.x, y: system.y });
+                if (points.length > 2000) points.shift();
+                
                 this.galaxy.push(system);
-
-                if ((nextId - CustomSystems.length) % Math.max(1, Math.floor(chunkSize / 2)) === 0) {
-                    const pct = Math.round((nextId + 1) / this.galaxySize * 100);
-                    this.updateLoadingProgress(pct, `Creating system: ${system.name}`);
-                }
             }
 
             created = end;
-            await new Promise(resolve => setTimeout(resolve, 10));
+            
+            // Update UI
+            const pct = Math.round((created / totalToCreate) * 100);
+            this.updateLoadingProgress(pct, `Generating system ${created} of ${totalToCreate}`);
+            
+            // Yield to main thread
+            await new Promise(resolve => setTimeout(resolve, 0));
         }
 
         this.setStartingSystem();
@@ -328,12 +346,15 @@ export class GameState {
             
         this.ship.x = this.currentSystem.x;
         this.ship.y = this.currentSystem.y;
+        this.ship.targetX = this.currentSystem.x;
+        this.ship.targetY = this.currentSystem.y;
     }
 
     calculateDistance(systemA, systemB) {
         if (!systemA || !systemB) return 0;
         const dx = systemB.x - systemA.x;
         const dy = systemB.y - systemA.y;
+        // Scale distance for gameplay purposes (15 pixels = 1 Light Year)
         return Math.sqrt(dx * dx + dy * dy) / 15;
     }
 
@@ -362,7 +383,7 @@ export class GameState {
         const dx = this.ship.targetX - this.ship.x;
         const dy = this.ship.targetY - this.ship.y;
         const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-        this.ship.rotation = angle;
+        this.ship.rotation = angle; // Use raw angle (0 deg = Right)
         
         return { 
             success: true, 
@@ -393,38 +414,56 @@ export class GameState {
         
         return { success: true, message: `Arrived at ${this.currentSystem.name}` };
     }
-    
-    scanNearbySystems() {
-        if (this.ship.radar === 0) {
-            return { success: false, message: "You need radar to scan systems!" };
-        }
-        const baseCost = 25;
-        const baseRadius = 15;
-        const cost = Math.max(5, baseCost - this.ship.radar);
-        const radius = baseRadius + (5 * this.ship.radar);
 
-        if (this.fuel < cost) {
-            return { success: false, message: `Not enough fuel! Need ${cost} units.` };
+    scanNearbySystems() {
+        // 1. Validation: Must have Radar level 1 or higher
+        if (this.ship.radar < 1) {
+            return { success: false, message: "Long-Range Radar upgrade required." };
+        }
+
+        // 2. Calculate Radius: 10 LY per level
+        const radius = this.ship.radar * 5;
+        
+        // 3. Calculate Cost: Flat fuel cost (e.g., 2 units) to prevent spamming, 
+        // or make it free if you prefer. Here we use a small fuel cost.
+        const fuelCost = 10 + (this.ship.radar * 5);
+
+        if (this.fuel < fuelCost) {
+            return { success: false, message: `Not enough fuel for scan! Need ${fuelCost} units.` };
         }
         
-        this.fuel -= cost;
+        this.fuel -= fuelCost;
         
+        // 4. Perform Scan
         let discoveredCount = 0;
+        
         this.galaxy.forEach(system => {
+            // Don't scan current system (already known)
             if (system === this.currentSystem) return;
             
+            // Calculate distance
             const distance = this.calculateDistance(this.currentSystem, system);
+            
+            // If within radius and currently unknown
             if (distance <= radius && !system.discovered) {
                 system.discovered = true;
                 discoveredCount++;
             }
         });
         
-        return { 
-            success: true, 
-            message: `Discovered ${discoveredCount} systems within ${radius} LY!`,
-            discoveredCount
-        };
+        // 5. Return Results
+        if (discoveredCount > 0) {
+            return { 
+                success: true, 
+                message: `Scan Complete: Discovered ${discoveredCount} systems within ${radius} LY.`,
+                discoveredCount: discoveredCount
+            };
+        } else {
+            return { 
+                success: true, 
+                message: `Scan Complete: No new systems found within ${radius} LY.` 
+            };
+        }
     }
     
     refuelShip() {
@@ -449,7 +488,7 @@ export class GameState {
             }
         }
     
-        const totalCost = fuelNeeded * costPerUnit;
+        const totalCost = Math.floor(fuelNeeded * costPerUnit);
         if (this.credits < totalCost) {
             return { success: false, message: `Need ${totalCost} CR` };
         }
@@ -463,87 +502,140 @@ export class GameState {
         };
     }
     
-    tradeItem(goodId, action) {
+/**
+     * Handles buying and selling with specific quantities.
+     * param {string} goodId 
+     * param {string} action 'buy' or 'sell'
+     * param {number|string} amount Specific number or 'all'
+     */
+/**
+     * Handles buying and selling with specific quantities.
+     * @param {string} goodId 
+     * @param {string} action 'buy', 'sell', 'sell-one' (legacy cargo button)
+     * @param {number|string} amount Specific number or 'all'
+     */
+    tradeItem(goodId, action, amount = 1) {
         if (!this.currentSystem.hasMarket) {
             return { success: false, message: 'No marketplace available!' };
         }
+        
         const marketItem = this.currentSystem.market[goodId];
+        
+        // For selling, we might not have a market entry if we are carrying rare loot
+        // In that case, sell price is 0 or we need a fallback logic. 
+        // For now, assume we can only sell things listed in the market.
         if (!marketItem) return { success: false, message: 'Item not traded here' };
         
+        // Determine Quantity Logic
+        let qty = 0;
+        
+        // Helper to parse amount
+        const getQty = (limit) => {
+            if (amount === 'all') return limit;
+            const num = parseInt(amount);
+            if (isNaN(num) || num < 1) return 1;
+            return Math.min(num, limit);
+        };
+
         if (action === 'buy') {
-            if (this.credits < marketItem.buyPrice) {
-                return { success: false, message: 'Not enough credits!' };
-            }
-            if (marketItem.quantity <= 0) {
-                return { success: false, message: 'Item out of stock!' };
-            }
-            const cargoSpace = this.cargo.reduce((sum, item) => sum + item.quantity, 0);
-            if (cargoSpace >= this.cargoCapacity) {
-                return { success: false, message: 'Cargo hold full!' };
-            }
+            const canAfford = Math.floor(this.credits / marketItem.buyPrice);
+            const spaceAvailable = this.cargoCapacity - this.cargo.reduce((sum, item) => sum + item.quantity, 0);
+            const stockAvailable = marketItem.quantity;
             
-            this.credits -= marketItem.buyPrice;
-            marketItem.quantity--;
+            // The absolute max we can physically buy
+            const absoluteMax = Math.min(canAfford, spaceAvailable, stockAvailable);
             
-            const existingItem = this.cargo.find(item => item.id === goodId);
-            if (existingItem) {
-                existingItem.quantity++;
+            qty = getQty(absoluteMax);
+
+            if (qty <= 0) {
+                if (stockAvailable <= 0) return { success: false, message: 'Out of stock!' };
+                if (spaceAvailable <= 0) return { success: false, message: 'Cargo full!' };
+                if (canAfford <= 0) return { success: false, message: 'Not enough credits!' };
+            }
+
+            // Transaction
+            const cost = qty * marketItem.buyPrice;
+            this.credits -= cost;
+            marketItem.quantity -= qty;
+            
+            // Add to cargo
+            const cargoItem = this.cargo.find(i => i.id === goodId);
+            if (cargoItem) {
+                cargoItem.quantity += qty;
             } else {
                 this.cargo.push({
                     id: goodId,
                     name: marketItem.name,
-                    quantity: 1,
+                    quantity: qty,
                     buyPrice: marketItem.buyPrice,
                     illegal: marketItem.illegal
                 });
             }
             
-            return { 
-                success: true, 
-                message: `Purchased 1 ${marketItem.name}`,
-                cost: marketItem.buyPrice
-            };
+            return { success: true, message: `Bought ${qty}x ${marketItem.name}`, cost: cost };
         } 
         else if (action === 'sell' || action === 'sell-one') {
-            const cargoItem = this.cargo.find(item => item.id === goodId);
-            if (!cargoItem || cargoItem.quantity < 1) {
-                return { success: false, message: 'Not enough in cargo!' };
+            const cargoItem = this.cargo.find(i => i.id === goodId);
+            if (!cargoItem || cargoItem.quantity <= 0) return { success: false, message: 'Not in cargo' };
+            
+            // Special case for the "SELL" button in Cargo tab which is usually single item
+            // But if we want it to respect the global multiplier, we use the same logic
+            // Force Quantity 1 for 'sell-one', otherwise respect 'all'/'x10' logic
+            if (action === 'sell-one') {
+                qty = 1;
+            } else {
+                qty = getQty(cargoItem.quantity); 
+            }
+
+            const revenue = qty * marketItem.sellPrice;
+            this.credits += revenue;
+            cargoItem.quantity -= qty;
+            
+            // Add back to market stock? (Optional economy feature)
+            marketItem.quantity += qty; 
+
+            // Remove empty
+            if (cargoItem.quantity <= 0) {
+                this.cargo = this.cargo.filter(i => i.id !== goodId);
             }
             
-            this.credits += marketItem.sellPrice;
-            cargoItem.quantity--;
-            
-            if (cargoItem.quantity === 0) {
-                this.cargo = this.cargo.filter(item => item.id !== goodId);
-            }
-            
-            return { 
-                success: true, 
-                message: `Sold 1 ${marketItem.name}`,
-                revenue: marketItem.sellPrice
-            };
+            return { success: true, message: `Sold ${qty}x ${marketItem.name}`, revenue: revenue };
         }
-        
-        return { success: false, message: 'Invalid trade action' };
+    }
+    dropItem(goodId) {
+        const cargoItem = this.cargo.find(i => i.id === goodId);
+        if (!cargoItem) return { success: false, message: 'Item not found' };
+            
+        cargoItem.quantity--;
+            
+        if (cargoItem.quantity <= 0) {
+            this.cargo = this.cargo.filter(i => i.id !== goodId);
+        }
+            
+        return { success: true, message: `Jettisoned 1x ${cargoItem.name}` };
     }
     
     upgradeShip(upgradeId) {
-        const upgrade = this.upgrades.find(u => u.id === upgradeId);
-        
-        if (this.credits < upgrade.cost) {
-            return { success: false, message: `Need ${upgrade.cost} CR` };
-        }
-        
-        this.credits -= upgrade.cost;
-        
-        switch(upgradeId) {
-            case 'hull':
-                this.ship.maxHull += upgrade.effect;
-                this.ship.hull = this.ship.maxHull;
-                return { 
-                    success: true, 
-                    message: `Hull upgraded to ${this.ship.maxHull}%`
-                };
+            const upgrade = this.upgrades.find(u => u.id === upgradeId);
+            
+            if (this.credits < upgrade.cost) {
+                return { success: false, message: `Need ${upgrade.cost} CR` };
+            }
+            
+            this.credits -= upgrade.cost;
+            
+            // NEW: Track count
+            if (!this.ship.upgrades[upgradeId]) this.ship.upgrades[upgradeId] = 0;
+            this.ship.upgrades[upgradeId]++;
+            
+            switch(upgradeId) {
+                case 'hull':
+                    this.ship.maxHull += upgrade.effect;
+                    this.ship.hull = this.ship.maxHull; // Auto-repair on upgrade
+                    return { 
+                        success: true, 
+                        message: `Hull upgraded to ${this.ship.maxHull}`
+                    };
             case 'weapons':
                 this.ship.damage += upgrade.effect;
                 return { 
@@ -703,7 +795,6 @@ export class GameState {
         this.contracts = [];
         
         if (this.galaxy.length === 0) {
-            console.error("Cannot generate contracts - galaxy is empty");
             return;
         }
         

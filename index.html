@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,122 +7,151 @@
     <meta http-equiv='cache-control' content='no-cache'> 
     <meta http-equiv='expires' content='0'> 
     <meta http-equiv='pragma' content='no-cache'>
-    <title>Galactic Trader Mobile</title>
+    <title>Galactic Trader: Deep Space</title>
+    
+    <!-- Fonts & Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jonycase/fa6icons@main/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@4.1.1/animate.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Styles -->
     <link rel="stylesheet" href="styles.css">
-    <script src="https://unpkg.com/mithril/mithril.js"></script>
 </head>
 <body>
-    <div id="app"></div>
-    
-    <!-- Galaxy Map Widget (New) -->
+
+    <!-- =========================================
+         1. LOADING SCREEN
+    ========================================== -->
+    <div id="loading-screen" class="loading-screen" style="display: none;">
+        <div class="loading-content">
+            <h2>GENERATING GALAXY</h2>
+            <div id="loading-text">Initializing stellar cartography...</div>
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================
+         2. ENCOUNTER MODAL (Combat/Events)
+    ========================================== -->
+    <div id="encounter-modal" class="modal-overlay" style="display: none;">
+        <div class="encounter-container">
+            <div class="encounter-header">
+                <i id="encounter-icon" class="fas fa-exclamation-circle"></i>
+                <h2 id="encounter-title">ENCOUNTER</h2>
+            </div>
+            <div id="encounter-content" class="encounter-body">
+                <!-- Dynamic Content injected by EncounterManager.js -->
+            </div>
+            <div id="encounter-log" class="combat-log"></div>
+            <div id="encounter-options" class="combat-options">
+                <!-- Dynamic Buttons injected by EncounterManager.js -->
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================
+         3. GALAXY MAP MODAL (The Optimized Map)
+    ========================================== -->
     <div id="galaxy-map-modal" class="galaxy-map-modal" style="display: none;">
         <div class="map-widget-container">
             <div class="map-header">
-                <h2><i class="fas fa-map-marked-alt"></i> GALAXY MAP</h2>
+                <h2>GALACTIC CHART</h2>
                 <button id="close-map-btn" class="btn-close"><i class="fas fa-times"></i></button>
             </div>
             
             <div class="map-canvas-wrapper">
+                <!-- Separate canvas for the full map view -->
                 <canvas id="full-galaxy-canvas"></canvas>
                 
-                <!-- Controls floating inside the canvas area -->
+                <!-- Map UI Overlays -->
                 <div class="map-controls-overlay">
+                    <!-- Search Box -->
                     <div class="search-container">
-                        <input type="text" id="map-search-input" placeholder="System Name..." list="discovered-systems-list">
+                        <input type="text" id="map-search-input" placeholder="Search System..." list="discovered-systems-list" autocomplete="off">
+                        <button id="map-search-btn" class="btn"><i class="fas fa-search"></i></button>
                         <datalist id="discovered-systems-list"></datalist>
-                        <button id="map-search-btn" class="btn small"><i class="fas fa-search"></i></button>
                     </div>
                     
-                    <div class="map-info-box" id="map-selected-info">
-                        <div class="info-title" style="color: #ffcc66; border-bottom: 1px solid #555; padding-bottom: 3px;">SELECT TARGET</div>
-                        <div class="info-details" style="font-size: 13px; line-height: 1.4; color: #ccc;">--</div>
-                        <button id="set-target-btn" class="btn btn-action small" style="margin-top: 5px; width: 100%;" disabled>SET COURSE</button>
+                    <!-- Info Box for Selected System -->
+                    <div id="map-selected-info" class="map-info-box">
+                        <div class="info-details"></div>
+                        <button id="set-target-btn" class="btn btn-action" disabled>SET COURSE</button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Loading Screen -->
-    <div id="loading-screen" class="loading-screen" style="display: none;">
-        <div style="font-size: 24px; margin-bottom: 20px;">Generating Galaxy...</div>
-        <div id="loading-text" style="font-size: 16px; margin-bottom: 10px;">Initializing</div>
-        <div style="width: 80%; height: 20px; background: #222255; border-radius: 10px; overflow: hidden; max-width: 300px;">
-            <div id="progress-bar" style="height: 100%; background: linear-gradient(90deg, #3388ff, #66ccff); width: 0%; transition: width 0.3s;"></div>
-        </div>
-        <div id="generation-info" class="generation-info" style="margin-top: 15px; font-size: 14px;"></div>
-    </div>
-    
-    <!-- Unified Encounter Modal -->
-    <div id="encounter-modal" class="encounter-modal">
-        <div class="encounter-container">
-            <h2><i class="fas" id="encounter-icon"></i> <span id="encounter-title"></span></h2>
-            <div id="encounter-content">
-                <!-- Dynamic content based on encounter type -->
-            </div>
-            <div id="encounter-log" style="height: 80px; overflow-y: auto; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px; margin: 12px 0; font-size: 14px;"></div>
-            <div id="encounter-options" class="combat-options"></div>
-        </div>
-    </div>
-    
-    <!-- Game Over Screen -->
+    <!-- =========================================
+         4. GAME OVER SCREEN
+    ========================================== -->
     <div id="game-over-screen" class="game-over-screen" style="display: none;">
-        <h2>YOUR SHIP IS DESTROYED</h2>
-        <div class="game-over-stats">
-            <div>Credits: <span id="game-over-credits">0 CR</span></div>
-            <div>Distance Traveled: <span id="game-over-distance">0 LY</span></div>
-            <div>Systems Visited: <span id="game-over-systems">0</span></div>
+        <div class="game-over-box">
+            <h1 style="color: #ff4444; margin-bottom: 10px;">CRITICAL FAILURE</h1>
+            <p style="color: #aaa; margin-bottom: 30px;">Your ship has been destroyed.</p>
+            
+            <div class="game-over-stats">
+                <div>Credits Earned: <span id="game-over-credits" style="color: #66ff99;">0</span></div>
+                <div>Distance Traveled: <span id="game-over-distance" style="color: #66ccff;">0</span></div>
+                <div>Systems Visited: <span id="game-over-systems">0</span></div>
+            </div>
+            
+            <button id="new-game-btn" class="btn btn-action" style="width: 100%; margin-top: 20px;">INITIALIZE NEW SHIP</button>
         </div>
-        <button id="new-game-btn" class="btn btn-action">START NEW GAME</button>
     </div>
-    
-    <!-- Main Game Container -->
-    <div class="game-container">
-        <!-- Init Screen -->
+
+    <!-- =========================================
+         5. MAIN APPLICATION CONTAINER
+    ========================================== -->
+    <div class="app-container">
+        
+        <!-- A. INITIALIZATION SCREEN (Start Menu) -->
         <div id="init-screen" class="init-screen">
-            <h2>CREATE YOUR GALAXY</h2>
-            <p>Select the size of your trading galaxy:</p>
-            <div class="galaxy-size-selector">
-                <div class="size-option" data-size="1000">
-                    <h3><i class="fas fa-star"></i> SMALL GALAXY</h3>
-                    <p>1000 Star Systems</p>
-                    <p>Perfect for beginners</p>
-                </div>
-                <div class="size-option" data-size="3200">
-                    <h3><i class="fas fa-stars"></i> MEDIUM GALAXY</h3>
-                    <p>3200 Star Systems</p>
-                    <p>Balanced challenge</p>
-                </div>
-                <div class="size-option" data-size="48000">
-                    <h3><i class="fas fa-galaxy"></i> VAST GALAXY</h3>
-                    <p>48000 Star Systems</p>
-                    <p>For experienced traders</p>
-                </div>
-            </div>
+            <h1 class="game-title" style="font-size: 3rem; margin-bottom: 10px; color: #66ccff;">GALACTIC<br>TRADER</h1>
+            <p class="subtitle" style="color: #88aaff; letter-spacing: 3px; margin-bottom: 40px;">DEEP SPACE EDITION</p>
             
-            <div class="galaxy-shape-selector" style="margin-top: 20px;">
-                <h3>Galaxy Shape</h3>
-                <div class="shape-option selected" data-shape="balanced">Balanced</div>
-                <div class="shape-option" data-shape="wide">Wide</div>
-                <div class="shape-option" data-shape="tall">Tall</div>
-            </div>
-            
-            <div style="margin-top: 30px; font-size: 14px; color: #88aaff;">
-                <p><i class="fas fa-info-circle"></i> Click on a galaxy size to start</p>
+            <div class="setup-box">
+                <h3 style="margin-bottom: 15px; color: #fff;">SELECT GALAXY SIZE</h3>
+                
+                <div class="galaxy-size-selector">
+                    <div class="size-option selected" data-size="1000">
+                        <div class="icon"><i class="fas fa-star"></i></div>
+                        <div class="label">Small</div>
+                        <div class="detail">1,000 Systems</div>
+                    </div>
+                    <div class="size-option" data-size="5000">
+                        <div class="icon"><i class="fas fa-atom"></i></div>
+                        <div class="label">Medium</div>
+                        <div class="detail">5,000 Systems</div>
+                    </div>
+                    <div class="size-option" data-size="50000">
+                        <div class="icon"><i class="fas fa-galaxy"></i></div>
+                        <div class="label">Massive</div>
+                        <div class="detail">50,000 Systems</div>
+                    </div>
+                </div>
+                
+                <div class="galaxy-shape-selector">
+                    <div class="shape-option selected" data-shape="balanced">Balanced</div>
+                    <div class="shape-option" data-shape="wide">Wide</div>
+                    <div class="shape-option" data-shape="tall">Tall</div>
+                </div>
+
+                <button id="start-game-btn" class="btn btn-action" style="margin-top: 25px; width: 100%; padding: 15px;">LAUNCH SYSTEMS</button>
             </div>
         </div>
-        
-        <!-- Game Content (hidden by default) -->
-        <div id="game-content" class="main-content" style="display: none;">
+
+        <!-- B. MAIN GAME INTERFACE (Hidden until start) -->
+        <div id="game-content" class="game-interface" style="display: none;">
+            
+            <!-- LEFT PANEL: MAP & VIEWPORT (Local View) -->
             <div class="map-container">
-                <canvas id="galaxy-canvas" width="800" height="600"></canvas>
-                <div id="system-container"></div>
+                <canvas id="galaxy-canvas"></canvas>
+                
+                <div id="system-container"></div> 
                 <div id="ship-container"></div>
                 
-                <!-- Target Pointer Overlay (New) -->
                 <div id="target-pointer" class="target-pointer" style="display: none;">
                     <div class="pointer-arrow"><i class="fas fa-chevron-up"></i></div>
                     <div class="pointer-info">
@@ -129,147 +159,146 @@
                         <span id="pointer-dist">0 LY</span>
                     </div>
                 </div>
-                
+
                 <div id="hover-pointer" class="target-pointer" style="display: none; z-index: 150;">
-                    <div class="pointer-arrow" style="font-size: 20px; color: #66ccff; text-shadow: 0 0 10px #0088ff;"><i class="fas fa-chevron-down"></i></div>
-                    <div class="pointer-info hover-details" style="border-color: #66ccff; color: #e0e0ff;"></div>
+                    <div class="hover-details"></div>
                 </div>
 
-                <div class="crt-overlay"></div>
                 <div id="notification" class="notification"></div>
+                <div class="crt-overlay"></div>
+                <div class="map-center-btn" title="Center on Ship"><i class="fas fa-crosshairs"></i></div>
             </div>
+
+            <!-- RIGHT PANEL: UI CONTROLS -->
             <div class="ui-panel">
                 <div class="tabs">
-                    <div class="tab active" data-tab="status"><i class="fas fa-info-circle"></i> Status</div>
+                    <div class="tab active" data-tab="status"><i class="fas fa-tachometer-alt"></i> Status</div>
                     <div class="tab" data-tab="market"><i class="fas fa-shopping-cart"></i> Market</div>
-                    <div class="tab" data-tab="cargo"><i class="fas fa-box-open"></i> Cargo</div>
+                    <div class="tab" data-tab="cargo"><i class="fas fa-box"></i> Cargo</div>
                     <div class="tab" data-tab="shipyard"><i class="fas fa-rocket"></i> Ship</div>
-                    <div class="tab" data-tab="overview"><i class="fas fa-globe"></i> Overview</div>
-                    <div class="tab" data-tab="contracts"><i class="fas fa-file-contract"></i> Contracts</div>
+                    <div class="tab" data-tab="overview"><i class="fas fa-globe"></i> System</div>
+                    <div class="tab" data-tab="contracts"><i class="fas fa-file-contract"></i> Jobs</div>
                 </div>
+
                 <div class="tab-content">
-                    <!-- Status Tab -->
+                    
+                    <!-- 1. STATUS TAB -->
                     <div class="panel-section status-tab">
                         <h2><i class="fas fa-space-shuttle"></i> SHIP STATUS</h2>
                         <div class="stats-grid">
                             <div class="stat">
                                 <span>Credits:</span>
-                                <span class="stat-value" id="credits">10,000 CR</span>
+                                <span class="stat-value" id="credits" style="color: #66ff99;">0 CR</span>
                             </div>
                             <div class="stat">
                                 <span>Fuel:</span>
-                                <span class="stat-value" id="fuel">15/15</span>
-                            </div>
-                            <div class="stat">
-                                <span>Cargo Space:</span>
-                                <span class="stat-value" id="cargo-space">0/50</span>
+                                <span class="stat-value" id="fuel">0/0</span>
                             </div>
                             <div class="stat">
                                 <span>Hull:</span>
-                                <span class="stat-value" id="hull">100%</span>
+                                <span class="stat-value" id="hull" style="color: #ff6666;">100%</span>
+                            </div>
+                            <div class="stat">
+                                <span>Cargo:</span>
+                                <span class="stat-value" id="cargo-space">0/0</span>
                             </div>
                         </div>
-                        <h2 style="margin-top: 15px;"><i class="fas fa-bullseye"></i> TARGET SYSTEM</h2>
-                        <div class="stats-grid">
+
+                        <h2 style="margin-top: 15px;"><i class="fas fa-crosshairs"></i> NAVIGATION</h2>
+                        <div class="nav-computer">
                             <div class="stat">
-                                <span>Selected:</span>
-                                <span class="stat-value" id="target-system">None</span>
+                                <span>Target:</span> <span class="stat-value" id="target-system" style="color: #ffcc66;">None</span>
                             </div>
                             <div class="stat">
-                                <span>Distance:</span>
-                                <span class="stat-value" id="distance">0 LY</span>
+                                <span>Distance:</span> <span class="stat-value" id="distance">0 LY</span>
                             </div>
                             <div class="stat">
-                                <span>Fuel Cost:</span>
-                                <span class="stat-value" id="fuel-cost">0</span>
+                                <span>Fuel Cost:</span> <span class="stat-value" id="fuel-cost">0</span>
                             </div>
-                        </div>
-                        <div class="mobile-controls" style="flex-wrap: wrap;">
-                            <button id="travel-btn" class="btn btn-action mobile-btn" style="flex: 1 0 45%;">
-                                <i class="fas fa-space-shuttle"></i> TRAVEL
+                            
+                            <div class="mobile-controls" style="margin-top: 10px;">
+                                <button id="travel-btn" class="btn btn-action mobile-btn">ENGAGE</button>
+                                <button id="refuel-btn" class="btn mobile-btn">REFUEL</button>
+                            </div>
+                            
+                            <!-- NEW BUTTON: LONG-RANGE SCAN -->
+                            <!-- Hidden by default (display: none), controlled by UI.js based on radar level -->
+                            <button id="scan-btn" class="btn mobile-btn" style="width: 100%; margin-top: 10px; display: none; background: rgba(176, 136, 255, 0.15); border-color: rgba(176, 136, 255, 0.5); color: #b088ff;">
+                                <i class="fas fa-satellite-dish"></i> LONG-RANGE SCAN
                             </button>
-                            <button id="refuel-btn" class="btn mobile-btn" style="flex: 1 0 45%;">
-                                <i class="fas fa-gas-pump"></i> REFUEL
-                            </button>
-                            <!-- New Map Button -->
-                            <button id="open-map-btn" class="btn mobile-btn" style="flex: 1 0 100%; margin-top: 5px; background: linear-gradient(to bottom, #336699, #224466);">
-                                <i class="fas fa-map-marked-alt"></i> OPEN GALAXY MAP
+                            
+                            <!-- The Button to Open the Full Map -->
+                            <button id="open-map-btn" class="btn mobile-btn" style="width: 100%; margin-top: 10px; background: #334466;">
+                                <i class="fas fa-map"></i> OPEN GALAXY MAP
                             </button>
                         </div>
                     </div>
-                    <!-- Market Tab -->
+
+                    <!-- 2. MARKET TAB -->
                     <div class="panel-section market-tab" style="display: none;">
-                        <h2><i class="fas fa-coins"></i> LOCAL MARKET</h2>
-                        <div class="market-grid">
-                            <div class="market-header">COMMODITY</div>
-                            <div class="market-header">BUY</div>
-                            <div class="market-header">SELL</div>
-                            <div class="market-header">STOCK</div>
-                            <div class="market-header">ACTIONS</div>
-                        </div>
+                        <h2><i class="fas fa-coins"></i> COMMODITIES</h2>
+                        <div class="market-grid"></div>
                     </div>
-                    <!-- Cargo Tab -->
+
+                    <!-- 3. CARGO TAB -->
                     <div class="panel-section cargo-tab" style="display: none;">
                         <h2><i class="fas fa-boxes"></i> CARGO HOLD</h2>
-                        <div class="cargo-item" style="font-weight: bold;">
+                        <div class="cargo-item" style="font-weight: bold; border-bottom: 1px solid #445; color: #88aaff; font-size: 11px;">
                             <span>ITEM</span>
                             <span>QTY</span>
-                            <span>SELL</span>
+                            <span>ACTION</span>
                         </div>
-                        <div id="cargo-hold">
-                            <!-- Filled dynamically -->
-                        </div>
+                        <div id="cargo-hold"></div>
                     </div>
-                    <!-- Shipyard Tab -->
+
+                    <!-- 4. SHIPYARD TAB -->
                     <div class="panel-section shipyard-tab" style="display: none;">
-                        <h2><i class="fas fa-hard-hat"></i> SHIP UPGRADES</h2>
-                        <p id="shipyard-status">Shipyard services not available in this system</p>
-                        <div class="ship-shop" id="ship-upgrades">
-                            <!-- Filled dynamically -->
-                        </div>
+                        <h2><i class="fas fa-tools"></i> UPGRADES</h2>
+                        <div id="shipyard-status" style="margin-bottom: 10px; color: #aaa; font-style: italic; font-size: 12px;"></div>
+                        <div id="ship-upgrades"></div>
                     </div>
-                    <!-- System Overview Tab -->
+
+                    <!-- 5. SYSTEM OVERVIEW TAB -->
                     <div class="panel-section overview-tab" style="display: none;">
-                        <h2><i class="fas fa-globe"></i> SYSTEM OVERVIEW</h2>
+                        <h2><i class="fas fa-info-circle"></i> SYSTEM INTEL</h2>
                         <div class="system-overview-grid">
                             <div class="system-overview-item">
-                                <h3><i class="fas fa-star"></i> Current System</h3>
-                                <div id="current-system-name">-</div>
-                                <div id="current-system-economy">-</div>
-                                <div id="current-system-security">-</div>
+                                <h3 id="current-system-name" style="color: #66ccff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">Unknown</h3>
+                                <div id="current-system-economy">Economy: -</div>
+                                <div id="current-system-security">Security: -</div>
                             </div>
                             <div class="system-overview-item">
-                                <h3><i class="fas fa-gas-pump"></i> Fuel Status</h3>
-                                <div id="overview-fuel">-</div>
-                                <div id="overview-refuel-cost">-</div>
+                                <h3>Resources</h3>
+                                <div id="overview-fuel">Fuel: -</div>
+                                <div id="overview-refuel-cost">Refuel: -</div>
                             </div>
                             <div class="system-overview-item">
-                                <h3><i class="fas fa-box"></i> Cargo Status</h3>
-                                <div id="overview-cargo">-</div>
-                                <div id="overview-cargo-value">-</div>
+                                <h3>Logistics</h3>
+                                <div id="overview-cargo">Cargo: -</div>
+                                <div id="overview-cargo-value">Value: -</div>
                             </div>
                             <div class="system-overview-item">
-                                <h3><i class="fas fa-skull"></i> Threat Level</h3>
-                                <div id="overview-threat">-</div>
-                                <div id="overview-pirate-chance">-</div>
+                                <h3>Danger</h3>
+                                <div id="overview-threat">Threat: -</div>
+                                <div id="overview-pirate-chance">Risk: -</div>
                             </div>
                         </div>
-                        <h2 style="margin-top: 15px;"><i class="fas fa-satellite"></i> NEARBY SYSTEMS</h2>
-                        <div id="nearby-systems">
-                            <!-- Filled dynamically -->
-                        </div>
+                        <h3 style="margin-top: 15px; font-size: 12px; border-bottom: 1px solid #445; color: #88aaff;">NEARBY SYSTEMS</h3>
+                        <div id="nearby-systems"></div>
                     </div>
-                    <!-- Contracts Tab -->
+
+                    <!-- 6. CONTRACTS TAB -->
                     <div class="panel-section contracts-tab" style="display: none;">
                         <h2><i class="fas fa-file-contract"></i> AVAILABLE CONTRACTS</h2>
-                        <div id="contracts-list">
-                            <!-- Filled dynamically -->
-                        </div>
+                        <div id="contracts-list"></div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
+
+                </div> <!-- End Tab Content -->
+            </div> <!-- End UI Panel -->
+        </div> <!-- End Game Content -->
+    </div> <!-- End App Container -->
+
+    <!-- Main Entry Point -->
     <script type="module" src="Game.js"></script>
 </body>
 </html>

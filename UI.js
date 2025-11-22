@@ -1,10 +1,13 @@
+/* --- START OF FILE ui.js --- */
+
 import { GalaxyMap } from './GalaxyMap.js';
 
+// --- Helper: Easing function for smooth travel animation ---
 function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
-// Global flag for travel state
+// --- Global State: Block interactions during hyperspace ---
 let isTraveling = false;
 
 export class UI {
@@ -12,964 +15,730 @@ export class UI {
         this.gameState = gameState;
         this.encounterManager = encounterManager;
         
-        // Initialize the Mega Optimized Map
-        this.galaxyMap = new GalaxyMap(gameState, this);
-
-        // Camera properties for Local View
+        // Camera settings for the Local Dashboard View
+        // Note: The GalaxyMap class maintains its own camera, but we keep values here for syncing
         this.camera = {
             x: 0,
             y: 0,
             zoom: 3,
-            minZoom: 1,
-            maxZoom: 15
+            minZoom: 0.5, 
+            maxZoom: 10
         };
 
-        // Pools & active sets
-        this.systemPool = [];
-        this.namePool = [];
-        this.activeSystems = new Map();
-        this.systemMap = new Map();
+        // Map Instances (Initialized in setupCanvas)
+        this.galaxyMap = null; 
+        this.globalMap = null;
 
-        // DOM refs
+        // Optimization State
+        this._lastPointerTarget = null;
+        this._lastPointerDist = null;
+
+        // Market State
+        this.marketQtyMode = 1; // 1, 10, or 'all'
+
+        // DOM References
         this.galaxyCanvas = null;
-        this.systemContainer = null;
-        this.shipContainer = null;
         this.shipIndicatorEl = null;
         this.targetPointerEl = null;
 
-        // Internal update scheduling
-        this.pendingUpdate = false;
-        this.cameraControlsInitialized = false;
-
-        // Bindings
+        // Bind the render loop context
         this._onAnimationFrame = this._onAnimationFrame.bind(this);
 
-        // Block clicks while traveling
+        // Global Event Listener: Prevent button clicks while traveling
         document.addEventListener('click', (e) => {
-            if (isTraveling && e.target.closest('button')) {
-                this.showNotification("Cannot interact while traveling!");
-                e.preventDefault();
+            if (isTraveling) {
+                // Allow closing the map if it happens to be open, but block game actions
+                if (e.target.closest('.btn-close')) return;
+                
+                if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                    this.showNotification("Navigation systems locked during travel.");
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
             }
         }, true);
         
-        // Setup app event listeners
+        // Initialize generic App listeners (Tabs, etc.)
         this.setupAppEventListeners();
     }
 
+    /**
+     * Called by Game.js when the DOM is ready.
+     * Initializes maps, canvas, and HUD elements.
+     */
     setupCanvas() {
         this.galaxyCanvas = document.getElementById('galaxy-canvas');
-        this.systemContainer = document.getElementById('system-container');
-        this.shipContainer = document.getElementById('ship-container');
+        const shipContainer = document.getElementById('ship-container');
         this.targetPointerEl = document.getElementById('target-pointer');
 
-        if (!this.galaxyCanvas || !this.systemContainer || !this.shipContainer) return;
+        if (!this.galaxyCanvas || !shipContainer) {
+            console.error("Critical UI elements missing in DOM (galaxy-canvas or ship-container).");
+            return;
+        }
 
-        // CRITICAL: Disable browser gestures on the canvas
-        this.galaxyCanvas.style.touchAction = 'none';
-
-        // Force initial resize calculation to render background
-        this.handleResize();
-
-        // Cache systems in a Map for O(1) lookup later
-        this.systemMap.clear();
-        this.gameState.galaxy.forEach(sys => this.systemMap.set(sys.id, sys));
+        // 1. Initialize Local Map (Dashboard ID: 'galaxy-canvas')
+        this.galaxyMap = new GalaxyMap(this.gameState, this, 'galaxy-canvas');
         
-        // Setup the Global Map (Grid Cache)
-        this.galaxyMap.setup();
+        // 2. Initialize Global Map (Modal ID: 'full-galaxy-canvas')
+        this.globalMap = new GalaxyMap(this.gameState, this, 'full-galaxy-canvas');
 
-        // Pre-create a small pool to avoid creating nodes constantly
-        this._createPool(Math.min(120, Math.max(40, Math.floor(this.gameState.galaxySize / 10))));
+        // 3. Create DOM Ship Indicator (The arrow icon overlaying the local map)
+        shipContainer.innerHTML = '';
+        this.shipIndicatorEl = document.createElement('div');
+        this.shipIndicatorEl.className = 'ship-indicator';
+        this.shipIndicatorEl.innerHTML = '<i class="fas fa-space-shuttle"></i>';
+        shipContainer.appendChild(this.shipIndicatorEl);
 
-        // Create ship indicator
-        this.shipContainer.innerHTML = '';
-        const shipIndicator = document.createElement('div');
-        shipIndicator.className = 'ship-indicator';
-        shipIndicator.innerHTML = '<i class="fas fa-space-shuttle"></i>';
-        this.shipIndicatorEl = shipIndicator;
-        this.shipContainer.appendChild(this.shipIndicatorEl);
-
-        // Center camera on ship initially
+        // 4. Initial Camera Setup
         this.centerCameraOnShip();
         
-        // Setup Hover effects (Tooltips)
-        this.setupHoverInput();
-        
-        // Setup Unified Pan/Zoom/Click Controls
-        this.setupCameraControls();
+        // 5. Setup Local Map Interactions
+        this.setupInputHandlers();   // Hover tooltips
+        this.setupCameraControls();  // Drag and Zoom
 
-        // Resize observer
-        window.addEventListener('resize', () => {
-            this.handleResize();
-            this.scheduleUpdate();
-            if(this.galaxyMap) this.galaxyMap.resize();
-        });
+        // 6. Bind "Open Galaxy Map" Button
+        const openMapBtn = document.getElementById('open-map-btn');
+        if(openMapBtn) {
+            openMapBtn.onclick = () => {
+                if(isTraveling) {
+                    this.showNotification("Sensors offline during hyperspace.");
+                    return;
+                }
+                this.globalMap.open();
+            };
+        }
 
-        // Start the RAF loop
+        // 7. Handle Window Resize
+        window.addEventListener('resize', () => this.handleResize());
+
+        // 8. Start the Render Loop
         requestAnimationFrame(this._onAnimationFrame);
-        
-        // Cleanup leftovers
-        Array.from(this.systemContainer.children).forEach(el => {
-            if (el.id == 'map-center-btn') return;
-            if (el.id == 'centerBtn') return;
-            el.remove();
-        });
-        this.systemPool.length = 0;
-        this.namePool.length = 0;
-        this.activeSystems.clear();
     }
 
     handleResize() {
-        if (!this.galaxyCanvas) return;
-        
-        const displayWidth = this.galaxyCanvas.clientWidth;
-        const displayHeight = this.galaxyCanvas.clientHeight;
-
-        if (this.galaxyCanvas.width !== displayWidth || this.galaxyCanvas.height !== displayHeight) {
-            this.galaxyCanvas.width = displayWidth;
-            this.galaxyCanvas.height = displayHeight;
-            this.drawBackground(); 
-        }
+        if (this.galaxyMap) this.galaxyMap.resize();
+        if (this.globalMap) this.globalMap.resize();
     }
 
-    _createPool(size) {
-        for (let i = 0; i < size; i++) {
-            const dot = document.createElement('div');
-            dot.className = 'system-dot';
-            dot.style.pointerEvents = 'auto';
-
-            const name = document.createElement('div');
-            name.className = 'system-name';
-            name.style.pointerEvents = 'none';
-
-            this.systemPool.push(dot);
-            this.namePool.push(name);
-        }
-    }
-
-    _acquireElements() {
-        if (this.systemPool.length === 0) this._createPool(20);
-        const dot = this.systemPool.pop();
-        const name = this.namePool.pop();
-
-        if (dot) {
-            dot.dataset.id = '';
-            dot.className = 'system-dot';
-            if (dot.parentNode) dot.parentNode.removeChild(dot);
-            dot.style.pointerEvents = 'auto';
-        }
-        if (name) {
-            name.textContent = '';
-            name.className = 'system-name';
-            if (name.parentNode) name.parentNode.removeChild(name);
-            name.style.pointerEvents = 'none';
-        }
-
-        return { dot, name };
-    }
-
-    _releaseElements(pair) {
-        if (!pair) return;
-        const dot = pair.dot || pair.dotEl || null;
-        const name = pair.name || pair.nameEl || null;
-
-        try {
-            if (dot && dot.parentNode) dot.parentNode.removeChild(dot);
-            if (name && name.parentNode) name.parentNode.removeChild(name);
-        } catch (e) { }
-
-        if (dot) {
-            dot.dataset.id = '';
-            dot.className = 'system-dot';
-            dot.style.backgroundColor = '';
-            dot.style.left = '';
-            dot.style.top = '';
-            dot.style.boxShadow = '';
-            dot.style.pointerEvents = 'auto';
-            this.systemPool.push(dot);
-        }
-
-        if (name) {
-            name.textContent = '';
-            name.className = 'system-name';
-            name.style.left = '';
-            name.style.top = '';
-            this.namePool.push(name);
-        }
-    }
-
-    _getVisibleWorldRect(margin = 80) {
-        const w = this.galaxyCanvas.width;
-        const h = this.galaxyCanvas.height;
-        const halfW = w / 2 / this.camera.zoom;
-        const halfH = h / 2 / this.camera.zoom;
-        return {
-            left: this.camera.x - halfW - margin / this.camera.zoom,
-            right: this.camera.x + halfW + margin / this.camera.zoom,
-            top: this.camera.y - halfH - margin / this.camera.zoom,
-            bottom: this.camera.y + halfH + margin / this.camera.zoom
-        };
-    }
-
-    scheduleUpdate() {
-        if (this.pendingUpdate) return;
-        this.pendingUpdate = true;
-        requestAnimationFrame(() => {
-            this.pendingUpdate = false;
-            this._updateView();
-        });
-    }
-
+    /**
+     * The Main Game Loop (Visuals Only)
+     */
     _onAnimationFrame() {
+        // Render the Local Map Canvas
+        if (this.galaxyMap) {
+            this.galaxyMap.render();
+        }
+
+        // Update HTML Overlays (Ship Icon & Target Arrow)
         this.updateShipPosition();
-        this.updateTargetPointer(); // Update every frame for smoothness
+        this.updateTargetPointer(); 
+        
         requestAnimationFrame(this._onAnimationFrame);
     }
 
-    // --- SMART TARGET POINTER LOGIC (CORRECTED) ---
-    updateTargetPointer() {
-        // Safety checks
-        if (!this.targetPointerEl || !this.galaxyCanvas || !this.gameState.targetSystem) {
-            if(this.targetPointerEl) this.targetPointerEl.style.display = 'none';
-            return;
-        }
+    // =========================================
+    // HUD LOGIC (Ship Position & Target Arrow)
+    // =========================================
 
-        const target = this.gameState.targetSystem;
-        const ship = this.gameState.ship;
+    updateShipPosition() {
+        if (!this.shipIndicatorEl || !this.galaxyMap) return;
         
-        // Hide if we are at the target system
-        if (target === this.gameState.currentSystem) {
-            this.targetPointerEl.style.display = 'none';
-            return;
-        }
-
-        // 1. Calculate Target Position on Screen relative to Camera Center
-        // Note: Pointer relies on Camera View, not just Ship position
-        const w = this.galaxyCanvas.clientWidth;
-        const h = this.galaxyCanvas.clientHeight;
-        const cx = w / 2;
-        const cy = h / 2;
-
-        // Projection: (worldPos - cameraPos) * zoom + centerOffset
-        const targetScreenX = (target.x - this.camera.x) * this.camera.zoom + cx;
-        const targetScreenY = (target.y - this.camera.y) * this.camera.zoom + cy;
-
-        // 2. Define Screen Bounds (Safe Area)
-        const margin = 50; 
-        const minX = margin;
-        const maxX = w - margin;
-        const minY = margin;
-        const maxY = h - margin;
-
-        let finalX, finalY, rotation;
-
-        // 3. Check if Target is On-Screen
-        const isOnScreen = (
-            targetScreenX >= minX && 
-            targetScreenX <= maxX && 
-            targetScreenY >= minY && 
-            targetScreenY <= maxY
+        // Ask the map instance where the ship is on screen coordinates
+        const screenPos = this.galaxyMap.worldToScreen(
+            this.gameState.ship.x, 
+            this.gameState.ship.y
         );
-
-        if (isOnScreen) {
-            // --- ON SCREEN ---
-            // Position arrow floating slightly above the star
-            finalX = targetScreenX;
-            finalY = targetScreenY - 30;
-            rotation = 180; // Pointing DOWN at the star
-        } else {
-            // --- OFF SCREEN ---
-            // Calculate vector from Center to Target Screen Pos
-            const dx = targetScreenX - cx;
-            const dy = targetScreenY - cy;
-            const angle = Math.atan2(dy, dx); // Radians
-
-            // Clamp to Ellipse/Box edge
-            const wHalf = (w / 2) - margin;
-            const hHalf = (h / 2) - margin;
-            
-            // Intersection math to find point on bounding box
-            const absCos = Math.abs(Math.cos(angle));
-            const absSin = Math.abs(Math.sin(angle));
-            
-            if (wHalf * absSin <= hHalf * absCos) {
-                // Hits vertical wall (left or right)
-                finalX = cx + (dx > 0 ? wHalf : -wHalf);
-                finalY = cy + (dx > 0 ? wHalf : -wHalf) * Math.tan(angle);
-            } else {
-                // Hits horizontal wall (top or bottom)
-                finalY = cy + (dy > 0 ? hHalf : -hHalf);
-                finalX = cx + (dy > 0 ? hHalf : -hHalf) / Math.tan(angle);
-            }
-
-            // Rotate arrow to point outward 
-            // (angle is rads, +90deg to align 'Up' icon with vector)
-            rotation = (angle * 180 / Math.PI) + 90;
-        }
-
-        // 4. Apply Styles
-        this.targetPointerEl.style.display = 'flex';
-        this.targetPointerEl.style.left = `${finalX}px`;
-        this.targetPointerEl.style.top = `${finalY}px`;
-        this.targetPointerEl.style.transform = `translate(-50%, -50%)`;
-
-        const arrow = this.targetPointerEl.querySelector('.pointer-arrow');
-        if (arrow) {
-            arrow.style.transform = `rotate(${rotation}deg)`;
-        }
-
-        // 5. Update Text (Corrected Logic for Undiscovered)
-        const dist = this.gameState.calculateDistance(this.gameState.currentSystem, target);
-        const nameEl = document.getElementById('pointer-name');
-        const distEl = document.getElementById('pointer-dist');
         
-        if (nameEl) {
-            // FIX: Hide real name if undiscovered
-            nameEl.textContent = target.discovered ? target.name : 'Unknown System';
-        }
-        if (distEl) {
-            distEl.textContent = dist.toFixed(1) + " LY";
-        }
+        // Apply CSS Transform
+        // The .ship-indicator CSS handles the centering via margins
+        this.shipIndicatorEl.style.transform = `translate(${screenPos.x}px, ${screenPos.y}px) rotate(${this.gameState.ship.rotation}deg)`;
+        this.shipIndicatorEl.style.left = '0'; 
+        this.shipIndicatorEl.style.top = '0';
     }
 
-    drawBackground() {
-        if (!this.galaxyCanvas) return;
-        const ctx = this.galaxyCanvas.getContext('2d');
-        ctx.clearRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
-        ctx.fillStyle = '#000033';
-        ctx.fillRect(0, 0, this.galaxyCanvas.width, this.galaxyCanvas.height);
-
-        ctx.fillStyle = '#ffffff';
-        const starCount = Math.min(900, Math.floor((this.galaxyCanvas.width * this.galaxyCanvas.height) / 2000));
-        for (let i = 0; i < starCount; i++) {
-            const x = Math.random() * this.galaxyCanvas.width;
-            const y = Math.random() * this.galaxyCanvas.height;
-            const size = Math.random() * 1.8;
-            ctx.beginPath();
-            ctx.arc(x, y, size, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-
-    _updateView() {
-        if (!this.systemContainer || !this.galaxyCanvas) return;
-
-        const rect = this._getVisibleWorldRect(120);
-        const activeSet = this.activeSystems;
-        const sysMap = this.systemMap;
-
-        // Remove out of view
-        for (const [id, elements] of activeSet.entries()) {
-            const sys = sysMap.get(id);
-            if (!sys || sys.x < rect.left || sys.x > rect.right || sys.y < rect.top || sys.y > rect.bottom) {
-                this._releaseElements(elements);
-                activeSet.delete(id);
+    updateTargetPointer() {
+            if (!this.targetPointerEl || !this.galaxyMap || !this.gameState.targetSystem) {
+                if(this.targetPointerEl) this.targetPointerEl.style.display = 'none';
+                return;
             }
-        }
 
-        // Add into view
-        for (let i = 0, len = this.gameState.galaxy.length; i < len; i++) {
-            const sys = this.gameState.galaxy[i];
-            if (sys.x >= rect.left && sys.x <= rect.right && sys.y >= rect.top && sys.y <= rect.bottom) {
-                if (!activeSet.has(sys.id)) {
-                    const { dot, name } = this._acquireElements();
-                    dot.dataset.id = sys.id;
-                    dot.style.backgroundColor = sys.discovered ? this._getEconomyColor(sys.economy) : '#666666';
-                    name.textContent = sys.discovered ? sys.name : '???';
-                    this.systemContainer.appendChild(dot);
-                    this.systemContainer.appendChild(name);
-                    activeSet.set(sys.id, { dotEl: dot, nameEl: name });
+            const target = this.gameState.targetSystem;
+            
+            // Hide if we are currently at the target
+            if (target === this.gameState.currentSystem) {
+                this.targetPointerEl.style.display = 'none';
+                return;
+            }
+
+            const w = this.galaxyCanvas.width;
+            const h = this.galaxyCanvas.height;
+            const cx = w / 2;
+            const cy = h / 2;
+
+            // Ask Map to Project Target to Screen Space
+            const screenPos = this.galaxyMap.worldToScreen(target.x, target.y);
+
+            // Define margin to keep arrow inside UI
+            const margin = 40;
+            
+            // Check if target is visible on screen
+            const isOnScreen = (
+                screenPos.x >= margin && 
+                screenPos.x <= w - margin && 
+                screenPos.y >= margin && 
+                screenPos.y <= h - margin
+            );
+
+            if (isOnScreen) {
+                // Target is visible: Place pointer directly above it
+                this.targetPointerEl.style.left = `${screenPos.x}px`;
+                this.targetPointerEl.style.top = `${screenPos.y - 40}px`;
+                this.targetPointerEl.style.transform = 'translate(-50%, -50%)';
+                this.targetPointerEl.querySelector('.pointer-arrow').style.transform = 'rotate(180deg)';
+            } else {
+                // Target is off-screen: Clamp pointer to the edge
+                
+                // FIX: Changed 'pos.x' to 'screenPos.x' (variable name correction)
+                const dx = screenPos.x - cx;
+                const dy = screenPos.y - cy;
+                const angle = Math.atan2(dy, dx);
+
+                // Calculate intersection with screen box
+                const boxW = (w / 2) - margin;
+                const boxH = (h / 2) - margin;
+                const absCos = Math.abs(Math.cos(angle));
+                const absSin = Math.abs(Math.sin(angle));
+                
+                let finalX, finalY;
+
+                if (boxW * absSin <= boxH * absCos) {
+                    finalX = cx + (dx > 0 ? boxW : -boxW);
+                    finalY = cy + (dx > 0 ? boxW : -boxW) * Math.tan(angle);
+                } else {
+                    finalY = cy + (dy > 0 ? boxH : -boxH);
+                    finalX = cx + (dy > 0 ? boxH : -boxH) / Math.tan(angle);
                 }
-            }
-        }
 
-        // Update positions
-        for (const [id, elements] of activeSet.entries()) {
-            const sys = sysMap.get(id);
-            if (!sys) continue;
-            const screenX = (sys.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
-            const screenY = (sys.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
-
-            const dotEl = elements.dotEl;
-            const nameEl = elements.nameEl;
-
-            dotEl.style.left = `${Math.round(screenX - 6)}px`;
-            dotEl.style.top = `${Math.round(screenY - 6)}px`;
-
-            nameEl.style.left = `${Math.round(screenX + 10)}px`;
-            nameEl.style.top = `${Math.round(screenY - 25)}px`;
-            nameEl.textContent = sys.discovered ? sys.name : '???';
-
-            const desiredColor = sys.discovered ? this._getEconomyColor(sys.economy) : '#666666';
-            if (dotEl.style.backgroundColor !== desiredColor) {
-                dotEl.style.backgroundColor = desiredColor;
+                this.targetPointerEl.style.left = `${finalX}px`;
+                this.targetPointerEl.style.top = `${finalY}px`;
+                this.targetPointerEl.style.transform = 'translate(-50%, -50%)';
+                
+                // Rotate arrow to point towards the off-screen target
+                const rotDeg = angle * 180 / Math.PI + 90;
+                this.targetPointerEl.querySelector('.pointer-arrow').style.transform = `rotate(${rotDeg}deg)`;  
             }
 
-            // Highlighting
-            dotEl.classList.toggle('selected-system', sys === this.gameState.currentSystem);
-            const isTarget = (sys === this.gameState.targetSystem);
-            dotEl.style.boxShadow = isTarget ? '0 0 10px #ffcc66, 0 0 20px #ffcc66' : '0 0 10px currentColor';
-            dotEl.style.zIndex = isTarget ? '100' : '2';
+            this.targetPointerEl.style.display = 'flex';
+
+                        // Update Text Info (Distance) - OPTIMIZED
+                        // Only write to DOM if values have changed
+                        const nameEl = document.getElementById('pointer-name');
+                        const distEl = document.getElementById('pointer-dist');
+                        
+                        if (nameEl && this._lastPointerTarget !== target) {
+                            nameEl.textContent = target.discovered ? target.name : 'Unknown';
+                            this._lastPointerTarget = target;
+                        }
+
+                        if (distEl) {
+                            const dist = Math.round(this.gameState.calculateDistance(this.gameState.currentSystem, target));
+                            if (this._lastPointerDist !== dist) {
+                                distEl.textContent = dist + " LY";
+                                this._lastPointerDist = dist;
+                            }
+                        }
         }
 
-        this.updateShipPosition();
-    }
-
-    _getEconomyColor(economy) {
-        switch (economy) {
-            case 'unpopulated': return '#bf683f';
-            case 'agricultural': return '#66cc66';
-            case 'industrial': return '#cc6666';
-            case 'tech': return '#6666cc';
-            case 'mining': return '#cccc66';
-            case 'trade': return '#cc66cc';
-            case 'military': return '#cc6666';
-            default: return '#aaaaaa';
-        }
-    }
+    // =========================================
+    // CAMERA CONTROLS (Local Map)
+    // =========================================
 
     centerCameraOnShip() {
-        this.camera.x = this.gameState.ship.x;
-        this.camera.y = this.gameState.ship.y;
-        this.camera.zoom = 3.0;
-        this.scheduleUpdate();
-    }
-
-    moveCamera(dx, dy) {
-        this.camera.x += dx / this.camera.zoom;
-        this.camera.y += dy / this.camera.zoom;
-        this.scheduleUpdate();
+        // We manipulate the GalaxyMap's camera directly
+        this.galaxyMap.camera.x = this.gameState.ship.x;
+        this.galaxyMap.camera.y = this.gameState.ship.y;
+        // Sync local reference
+        this.camera = this.galaxyMap.camera;
     }
 
     setZoom(zoom) {
-        this.camera.zoom = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, zoom));
-        this.scheduleUpdate();
+        const z = Math.max(this.camera.minZoom, Math.min(this.camera.maxZoom, zoom));
+        this.galaxyMap.camera.zoom = z;
     }
 
-    updateShipPosition() {
-        if (!this.shipIndicatorEl || !this.gameState.currentSystem || !this.galaxyCanvas) return;
-        const screenX = (this.gameState.ship.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
-        const screenY = (this.gameState.ship.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
-        this.shipIndicatorEl.style.left = `${Math.round(screenX - 12)}px`;
-        this.shipIndicatorEl.style.top = `${Math.round(screenY - 12)}px`;
-        this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
+    moveCamera(dx, dy) {
+        this.galaxyMap.camera.x += dx / this.galaxyMap.camera.zoom;
+        this.galaxyMap.camera.y += dy / this.galaxyMap.camera.zoom;
     }
 
-    // --- INPUT SYSTEM ---
-    setupHoverInput() {
-        this.systemContainer.addEventListener('pointermove', (e) => {
-            const target = e.target.closest('.system-dot');
-            if (!target) {
-                this.hideSystemInfo();
-                return;
-            }
-            const systemId = parseInt(target.dataset.id, 10);
-            const system = this.systemMap.get(systemId);
+    setupInputHandlers() {
+        // Hover Tooltip Logic for Local Map
+        this.galaxyCanvas.addEventListener('mousemove', (e) => {
+            if(isTraveling) return;
+            
+            const rect = this.galaxyCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // Delegate hit testing to the GalaxyMap instance
+            const system = this.galaxyMap.getSystemAt(x, y);
+            
             if (system) {
-                this.showSystemInfo(system, e.clientX, e.clientY);
+                this.galaxyCanvas.style.cursor = 'pointer';
+                this.showSystemInfo(system, x, y);
+            } else {
+                this.galaxyCanvas.style.cursor = 'default';
+                this.hideSystemInfo();
             }
         });
-        this.systemContainer.addEventListener('pointerleave', () => this.hideSystemInfo());
+
+        this.galaxyCanvas.addEventListener('mouseleave', () => {
+            this.hideSystemInfo();
+        });
     }
 
-    selectSystem(systemId) {
-        const system = this.systemMap.get(systemId);
-        if (system && system !== this.gameState.currentSystem) {
-            this.gameState.targetSystem = system;
-            this.updateUI();
-            const name = system.discovered ? system.name : 'Unknown System';
-            this.showNotification(`Target: ${name}`);
-            this.scheduleUpdate();
+    showSystemInfo(system, screenX, screenY) {
+        const pointer = document.getElementById('hover-pointer');
+        const content = pointer ? pointer.querySelector('.hover-details') : null;
+        
+        if (!pointer || !content) return;
+
+        if (!system.discovered) {
+            content.innerHTML = `
+                <div style="color: #ff6666; font-weight:bold;">Unknown System</div>
+                <div style="color: #aaa;">Undiscovered</div>
+            `;
+        } else {
+            content.innerHTML = `
+                <div style="color: #66ccff; font-weight:bold; border-bottom:1px solid #445; padding-bottom:2px; margin-bottom:2px;">${system.name}</div>
+                <div class="hover-row"><span class="hover-label">Economy:</span> <span class="hover-val">${system.economy}</span></div>
+                <div class="hover-row"><span class="hover-label">Sec:</span> <span class="hover-val">${system.security}</span></div>
+            `;
         }
+
+        pointer.style.display = 'flex';
+        pointer.style.left = `${screenX}px`;
+        pointer.style.top = `${screenY - 20}px`; 
+        pointer.style.transform = 'translate(-50%, -100%)';
     }
 
-    handleProximityClick(clientX, clientY, radius) {
-        const rect = this.galaxyCanvas.getBoundingClientRect();
-        const clickX = clientX - rect.left;
-        const clickY = clientY - rect.top;
-
-        let closestDist = radius;
-        let closestId = null;
-
-        for (const [id, elements] of this.activeSystems) {
-            const sys = this.systemMap.get(id);
-            if (!sys) continue;
-
-            const screenX = (sys.x - this.camera.x) * this.camera.zoom + this.galaxyCanvas.width / 2;
-            const screenY = (sys.y - this.camera.y) * this.camera.zoom + this.galaxyCanvas.height / 2;
-
-            const dist = Math.hypot(clickX - screenX, clickY - screenY);
-
-            if (dist < closestDist) {
-                closestDist = dist;
-                closestId = id;
-            }
-        }
-
-        if (closestId !== null) {
-            this.selectSystem(closestId);
-        }
+    hideSystemInfo() {
+        const pointer = document.getElementById('hover-pointer');
+        if (pointer) pointer.style.display = 'none';
     }
 
     setupCameraControls() {
-        const container = document.querySelector('.map-container');
-        if (!container || this.cameraControlsInitialized) return;
-        this.cameraControlsInitialized = true;
-
-        let isDragging = false;
-        let startX = 0;
-        let startY = 0;
-        let lastTouchDistance = 0;
-        let totalDragDistance = 0;
-
-        const handleTap = (clientX, clientY, target) => {
-            if (isTraveling) return;
-            const dot = target.closest('.system-dot');
-            if (dot) {
-                const systemId = parseInt(dot.dataset.id, 10);
-                this.selectSystem(systemId);
-                return;
-            }
-            this.handleProximityClick(clientX, clientY, 45);
-        };
-
-        container.addEventListener('mousedown', (e) => {
-            isDragging = true;
-            startX = e.clientX;
-            startY = e.clientY;
-            totalDragDistance = 0;
-            container.style.cursor = 'grabbing';
-        });
-
-        container.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            e.preventDefault();
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-            totalDragDistance += Math.hypot(dx, dy);
-            this.moveCamera(-dx, -dy);
-            startX = e.clientX;
-            startY = e.clientY;
-            this.scheduleUpdate();
-        });
-
-        const endMouse = (e) => {
-            if (!isDragging) return;
-            isDragging = false;
-            container.style.cursor = 'grab';
-            if (totalDragDistance < 10) {
-                handleTap(e.clientX, e.clientY, e.target);
-            }
-        };
-
-        container.addEventListener('mouseup', endMouse);
-        container.addEventListener('mouseleave', () => { isDragging = false; container.style.cursor = 'grab'; });
-
-        // Touch
-        container.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 1) {
-                isDragging = true;
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
-                totalDragDistance = 0;
-            } else if (e.touches.length === 2) {
-                const dx = e.touches[0].clientX - e.touches[1].clientX;
-                const dy = e.touches[0].clientY - e.touches[1].clientY;
-                lastTouchDistance = Math.sqrt(dx * dx + dy * dy);
-                isDragging = false; 
-            }
-        }, { passive: false });
-
-        container.addEventListener('touchmove', (e) => {
-            if (e.cancelable) e.preventDefault();
-
-            if (isDragging && e.touches.length === 1) {
-                const dx = e.touches[0].clientX - startX;
-                const dy = e.touches[0].clientY - startY;
-                totalDragDistance += Math.hypot(dx, dy);
-                this.moveCamera(-dx, -dy);
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
-                this.scheduleUpdate();
-            } else if (e.touches.length === 2) {
-                const dx = e.touches[0].clientX - e.touches[1].clientX;
-                const dy = e.touches[0].clientY - e.touches[1].clientY;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                if (lastTouchDistance > 0) {
-                    const diff = distance - lastTouchDistance;
-                    this.setZoom(this.camera.zoom + (diff * 0.015));
-                }
-                lastTouchDistance = distance;
-            }
-        }, { passive: false });
-
-        container.addEventListener('touchend', (e) => {
-            if (isDragging && e.touches.length === 0) {
-                isDragging = false;
-                if (totalDragDistance < 10) {
-                    const touch = e.changedTouches[0];
-                    const target = document.elementFromPoint(touch.clientX, touch.clientY);
-                    handleTap(touch.clientX, touch.clientY, target || e.target);
-                }
-            }
-            if (e.touches.length === 0) {
-                isDragging = false;
-                lastTouchDistance = 0;
-            }
-        });
-
-        container.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const zoomAmount = e.deltaY > 0 ? -0.1 : 0.1;
-            this.setZoom(this.camera.zoom + zoomAmount);
-        }, { passive: false });
-        
-        const centerBtn = document.createElement('div');
-        centerBtn.className = 'map-center-btn';
-        centerBtn.innerHTML = '<i class="fas fa-crosshairs"></i>';
-        centerBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.centerCameraOnShip();
-        });
-        container.appendChild(centerBtn);
+        // Recenter button only - GalaxyMap.js handles camera drag/zoom
+        const centerBtn = document.querySelector('.map-center-btn');
+        if(centerBtn) {
+            centerBtn.onclick = () => this.centerCameraOnShip();
+        }
     }
+
+    // =========================================
+    // UI PANELS & DATA BINDING
+    // =========================================
 
     updateUI() {
-        if(this.galaxyMap) this.galaxyMap.updateInfoBox();
-
-        const creditsEl = document.getElementById('credits');
-        const fuelEl = document.getElementById('fuel');
-        const hullEl = document.getElementById('hull');
-        const cargoSpaceEl = document.getElementById('cargo-space');
-        const targetSystemEl = document.getElementById('target-system');
-        const distanceEl = document.getElementById('distance');
-        const fuelCostEl = document.getElementById('fuel-cost');
-        
-        if (creditsEl) creditsEl.textContent = this.gameState.credits.toLocaleString() + ' CR';
-        if (fuelEl) fuelEl.textContent = `${Math.round(this.gameState.fuel)}/${this.gameState.maxFuel}`;
-        if (hullEl) hullEl.textContent = this.gameState.ship.hull + '%';
-        
-        const cargoSpace = this.gameState.cargo.reduce((sum, item) => sum + item.quantity, 0);
-        if (cargoSpaceEl) cargoSpaceEl.textContent = `${cargoSpace}/${this.gameState.cargoCapacity}`;
-        
-        if (this.gameState.targetSystem) {
-            const name = this.gameState.targetSystem.discovered ? 
-                this.gameState.targetSystem.name : 'Unknown System';
-            if (targetSystemEl) targetSystemEl.textContent = name;
-            
-            const distance = this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
-            if (distanceEl) distanceEl.textContent = Math.round(distance * 10) / 10 + ' LY';
-            const fuelCost = Math.ceil(distance);
-            if (fuelCostEl) fuelCostEl.textContent = fuelCost;
-        } else {
-            if (targetSystemEl) targetSystemEl.textContent = 'None';
-            if (distanceEl) distanceEl.textContent = '0 LY';
-            if (fuelCostEl) fuelCostEl.textContent = '0';
+        // If global map is open, update its info box
+        if(this.globalMap && this.globalMap.active) {
+            this.globalMap.updateInfoBox();
         }
+
+        const el = (id) => document.getElementById(id);
         
-        const marketContainer = document.querySelector('.market-grid');
-        if (marketContainer && this.gameState.currentSystem) {
-            if (!this.gameState.currentSystem.hasMarket) {
-                marketContainer.innerHTML = '<div class="no-market-message">Market not available in this system</div>';
+        // 1. Top Status Bar
+        if(el('credits')) el('credits').textContent = Math.floor(this.gameState.credits).toLocaleString() + ' CR';
+        if(el('fuel')) el('fuel').textContent = `${Math.floor(this.gameState.fuel)}/${this.gameState.maxFuel}`;
+        if(el('hull')) el('hull').textContent = Math.floor(this.gameState.ship.hull) + '%';
+        
+        const cargoCount = this.gameState.cargo.reduce((a,b) => a + b.quantity, 0);
+        if(el('cargo-space')) el('cargo-space').textContent = `${cargoCount}/${this.gameState.cargoCapacity}`;
+
+        // 2. Navigation Panel
+        const target = this.gameState.targetSystem;
+        if(el('target-system')) el('target-system').textContent = target ? (target.discovered ? target.name : 'Unknown') : 'None';
+        
+        const dist = target ? this.gameState.calculateDistance(this.gameState.currentSystem, target) : 0;
+        if(el('distance')) el('distance').textContent = Math.round(dist) + ' LY';
+        if(el('fuel-cost')) el('fuel-cost').textContent = Math.ceil(dist);
+        
+                // 1. UPDATE SCAN BUTTON VISIBILITY
+        const scanBtn = document.getElementById('scan-btn');
+        if (scanBtn) {
+            const radarLevel = this.gameState.ship.radar || 0;
+            
+            if (radarLevel >= 1) {
+                scanBtn.style.display = 'inline-flex'; // Show button
+                // Optional: Update tooltip to show current range
+                scanBtn.title = `Range: ${radarLevel * 10} LY | Cost: 2 Fuel`;
             } else {
-                marketContainer.innerHTML = `
-                    <div class="market-header">COMMODITY</div>
-                    <div class="market-header">BUY</div>
-                    <div class="market-header">SELL</div>
-                    <div class="market-header">STOCK</div>
-                    <div class="market-header">ACTIONS</div>
+                scanBtn.style.display = 'none'; // Hide button
+            }
+        }
+
+        // 3. Update Specific Panels
+        this.updateMarketUI();
+        this.updateCargoUI();
+        this.updateShipyardUI();
+        this.updateOverviewUI();
+        this.updateContractsUI();
+    }
+    
+    updateMarketUI() {
+            const grid = document.querySelector('.market-grid');
+            const marketContainer = document.querySelector('.market-tab'); 
+            if(!grid || !marketContainer) return;
+            
+            const sys = this.gameState.currentSystem;
+            
+            if(!sys.hasMarket) {
+                grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:20px; color:#888;">No Market Access in this System</div>';
+                return;
+            }
+
+            // 1. Inject Quantity Controls
+            let controls = document.getElementById('market-controls');
+            if (!controls) {
+                controls = document.createElement('div');
+                controls.id = 'market-controls';
+                controls.className = 'market-controls';
+                grid.parentNode.insertBefore(controls, grid);
+            }
+
+            const getBtnClass = (mode) => `btn small ${this.marketQtyMode === mode ? 'btn-action' : ''}`;
+            
+            controls.innerHTML = `
+                <span style="font-size:11px; color:#888; margin-right:10px;">AMOUNT:</span>
+                <button class="${getBtnClass(1)}" id="qty-1">x1</button>
+                <button class="${getBtnClass(10)}" id="qty-10">x10</button>
+                <button class="${getBtnClass('all')}" id="qty-all">ALL</button>
+            `;
+
+            // Bind Toggles
+            controls.querySelector('#qty-1').onclick = () => { this.marketQtyMode = 1; this.updateMarketUI(); };
+            controls.querySelector('#qty-10').onclick = () => { this.marketQtyMode = 10; this.updateMarketUI(); };
+            controls.querySelector('#qty-all').onclick = () => { this.marketQtyMode = 'all'; this.updateMarketUI(); };
+            
+            // 2. Build Grid
+            grid.innerHTML = `
+                <div class="market-header">ITEM</div>
+                <div class="market-header">BUY</div>
+                <div class="market-header">SELL</div>
+                <div class="market-header">STOCK</div>
+                <div class="market-header">ACTION</div>
+            `;
+            
+            this.gameState.goods.forEach(g => {
+                const m = sys.market[g.id];
+                if(!m) return;
+                
+                const item = document.createElement('div');
+                item.className = 'market-item';
+                
+                // Calculate dynamic cost for tooltip or display? For now just standard display
+                // Check afford/space based on CURRENT MODE to disable buttons visually
+                let canBuy = true;
+                if (this.marketQtyMode === 'all' && m.quantity < 1) canBuy = false;
+                else if (typeof this.marketQtyMode === 'number' && m.quantity < this.marketQtyMode) canBuy = false; // Optional: strict check
+                
+                // Strict check: Only disable if we can't buy ANY
+                if (m.quantity <= 0 || this.gameState.credits < m.buyPrice) canBuy = false;
+
+                const stockColor = m.quantity > 0 ? '#6f9' : '#f66';
+                
+                item.innerHTML = `
+                    <div>${m.name} ${m.illegal ? '<i class="fas fa-exclamation-triangle" style="color:#f66" title="Illegal"></i>' : ''}</div>
+                    <div>${m.buyPrice}</div>
+                    <div>${m.sellPrice}</div>
+                    <div style="color:${stockColor}">${m.quantity}</div>
+                    <div style="display:flex; gap:5px;">
+                        <button class="btn btn-buy small" data-id="${g.id}" ${canBuy ? '' : 'disabled'}>B</button>
+                        <button class="btn btn-sell small" data-id="${g.id}">S</button>
+                    </div>
                 `;
                 
-                this.gameState.goods.forEach(good => {
-                    const marketItem = this.gameState.currentSystem.market[good.id];
-                    if (!marketItem) return;
-        
-                    const marketElement = document.createElement('div');
-                    marketElement.className = 'market-item';
-                    
-                    const illegalIndicator = marketItem.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
-                    const stockIndicator = marketItem.quantity > 0 ? 
-                        `<span style="color: #66ff99;">${marketItem.quantity}</span>` : 
-                        `<span style="color: #ff6666;">0</span>`;
-                    
-                    marketElement.innerHTML = `
-                        <span>${illegalIndicator}${marketItem.name}</span>
-                        <span>${marketItem.buyPrice} CR</span>
-                        <span>${marketItem.sellPrice} CR</span>
-                        <span>${stockIndicator}</span>
-                        <div style="display: flex; gap: 5px; justify-content: center;">
-                            <button class="btn btn-buy" data-good="${good.id}" data-action="buy" ${marketItem.quantity <= 0 ? 'disabled' : ''}>BUY</button>
-                            <button class="btn btn-sell" data-good="${good.id}" data-action="sell">SELL</button>
-                        </div>
-                    `;
-                    marketContainer.appendChild(marketElement);
-                });
-            }
-        }
-        
-        const cargoContainer = document.getElementById('cargo-hold');
-        if (cargoContainer) {
-            cargoContainer.innerHTML = '';
-            if (this.gameState.cargo.length === 0) {
-                const emptyItem = document.createElement('div');
-                emptyItem.className = 'cargo-item';
-                emptyItem.innerHTML = '<span style="grid-column: 1 / span 3; text-align: center; color: #8888ff;">Cargo hold is empty</span>';
-                cargoContainer.appendChild(emptyItem);
-            } else {
-                this.gameState.cargo.forEach(item => {
-                    const cargoItem = document.createElement('div');
-                    cargoItem.className = 'cargo-item';
-                    const illegalIndicator = item.illegal ? '<i class="fas fa-exclamation-triangle" style="color: #ff6666;"></i> ' : '';
-                    const marketItem = this.gameState.currentSystem.market?.[item.id];
-                    const canSell = this.gameState.currentSystem.hasMarket && marketItem;
-                    
-                    cargoItem.innerHTML = `
-                        <span>${illegalIndicator}${item.name}</span>
-                        <span>${item.quantity}</span>
-                        <button class="btn btn-sell" 
-                                data-good="${item.id}" 
-                                data-action="sell-one" 
-                                ${canSell ? '' : 'disabled'}>
-                            SELL
-                        </button>
-                    `;
-                    cargoContainer.appendChild(cargoItem);
-                });
-            }
-        }
-        
-        const shipyardContainer = document.getElementById('ship-upgrades');
-        if (shipyardContainer) {
-            shipyardContainer.innerHTML = '';
-            const shipyardStatusEl = document.getElementById('shipyard-status');
-            if (shipyardStatusEl) {
-                if (this.gameState.currentSystem && this.gameState.currentSystem.hasShipyard) {
-                    shipyardStatusEl.textContent = 'Available upgrades:';
-                    this.gameState.upgrades.forEach(upgrade => {
-                        const upgradeCard = document.createElement('div');
-                        upgradeCard.className = 'upgrade-card';
-                        upgradeCard.innerHTML = `
-                            <div class="upgrade-header">
-                                <i class="${upgrade.icon}"></i>
-                                <h3 style="font-size: 16px;">${upgrade.name}</h3>
-                            </div>
-                            <p style="font-size: 14px; margin: 5px 0;">${upgrade.description}</p>
-                            <div style="display: flex; justify-content: space-between; margin-top: 8px;">
-                                <span style="font-size: 14px;">Cost: ${upgrade.cost} CR</span>
-                                <button class="btn btn-buy" data-upgrade="${upgrade.id}">UPGRADE</button>
-                            </div>
-                        `;
-                        shipyardContainer.appendChild(upgradeCard);
-                    });
-                } else {
-                    shipyardStatusEl.textContent = 'Shipyard services not available in this system';
-                }
-            }
-        }
-        
-        if (this.gameState.ship.radar > 0) {
-            const scanButton = document.createElement('button');
-            scanButton.id = 'scan-btn';
-            scanButton.className = 'btn mobile-btn';
-            scanButton.innerHTML = '<i class="fas fa-satellite"></i> SCAN SYSTEMS';
-            scanButton.style.marginTop = '10px';
-            scanButton.style.width = '100%';
-
-            if (this.gameState.ship.radar === 0) {
-                scanButton.disabled = true;
-                scanButton.style.opacity = '0.6';
-            }
-
-            const statusTab = document.querySelector('.status-tab');
-            if (statusTab) {
-                const existingBtn = document.getElementById('scan-btn');
-                if (existingBtn) existingBtn.remove();
-                statusTab.appendChild(scanButton);
-                scanButton.addEventListener('click', () => {
-                    const result = this.gameState.scanNearbySystems();
-                    if (this.gameState.ship.radar === 0) {
-                        this.showNotification("You need radar to scan systems!");
-                        return;
-                    }
-                    if (result.success) {
-                        this.showNotification(result.message);
-                        this.scheduleUpdate();
-                        this.updateUI();
-                        this.galaxyMap.setup();
-                    } else {
-                        this.showNotification(result.message);
-                    }
-                });
-            }
-        }
-        
-        this.updateSystemOverview();
-        this.updateContractsList();
-        
-        document.querySelectorAll('[data-good]').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const goodId = e.target.dataset.good;
-                const action = e.target.dataset.action;
-                const result = this.gameState.tradeItem(goodId, action);
-                this.showNotification(result.message);
-                this.updateUI();
+                // Bind
+                item.querySelector('.btn-buy').onclick = () => this.handleTrade(g.id, 'buy');
+                item.querySelector('.btn-sell').onclick = () => this.handleTrade(g.id, 'sell');
+                
+                grid.appendChild(item);
             });
-        });
-        
-        document.querySelectorAll('[data-upgrade]').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const upgradeId = e.target.dataset.upgrade;
-                const result = this.gameState.upgradeShip(upgradeId);
-                this.showNotification(result.message);
-                this.updateUI();
-            });
-        });
-        
-        this.scheduleUpdate();
-    }
-
-    updateSystemOverview() {
-        const currentSystemName = document.getElementById('current-system-name');
-        const currentSystemEconomy = document.getElementById('current-system-economy');
-        const currentSystemSecurity = document.getElementById('current-system-security');
-        const overviewFuel = document.getElementById('overview-fuel');
-        const overviewRefuelCost = document.getElementById('overview-refuel-cost');
-        const overviewCargo = document.getElementById('overview-cargo');
-        const overviewCargoValue = document.getElementById('overview-cargo-value');
-        const overviewThreat = document.getElementById('overview-threat');
-        const overviewPirateChance = document.getElementById('overview-pirate-chance');
-        const nearbySystems = document.getElementById('nearby-systems');
-        
-        if (this.gameState.currentSystem) {
-            if (currentSystemName) currentSystemName.textContent = this.gameState.currentSystem.name;
-            if (currentSystemEconomy) currentSystemEconomy.textContent = `Economy: ${this.gameState.currentSystem.economy.charAt(0).toUpperCase() + this.gameState.currentSystem.economy.slice(1)}`;
-            if (currentSystemSecurity) currentSystemSecurity.textContent = `Security: ${this.gameState.currentSystem.security.charAt(0).toUpperCase() + this.gameState.currentSystem.security.slice(1)}`;
-            
-            if (overviewFuel) overviewFuel.textContent = `${this.gameState.fuel}/${this.gameState.maxFuel} units`;
-            
-            let costPerUnit = 0;
-            let fuelNeeded = 0;
-            let totalCost = 0;
-            
-            if (this.gameState.currentSystem.hasRefuel) {
-                switch(this.gameState.currentSystem.techLevel) {
-                    case 'high': costPerUnit = 10; break;
-                    case 'medium': costPerUnit = 15; break;
-                    case 'low': costPerUnit = 20; break;
-                    default: costPerUnit = 15;
-                }
-                fuelNeeded = this.gameState.maxFuel - this.gameState.fuel;
-                totalCost = fuelNeeded * costPerUnit;
-            }
-            
-            if (overviewRefuelCost) {
-                overviewRefuelCost.textContent = this.gameState.currentSystem.hasRefuel ? 
-                    `Refuel cost: ${totalCost} CR` : 
-                    'Refuel not available';
-            }
-            
-            const cargoSpace = this.gameState.cargo.reduce((sum, item) => sum + item.quantity, 0);
-            let cargoValue = 0;
-            
-            if (this.gameState.currentSystem.hasMarket) {
-                this.gameState.cargo.forEach(item => {
-                    const marketItem = this.gameState.currentSystem.market?.[item.id];
-                    if (marketItem) {
-                        cargoValue += marketItem.sellPrice * item.quantity;
-                    }
-                });
-            }
-            
-            if (overviewCargo) overviewCargo.textContent = `${cargoSpace}/${this.gameState.cargoCapacity} units`;
-            if (overviewCargoValue) {
-                overviewCargoValue.textContent = this.gameState.currentSystem.hasMarket ? 
-                    `Value: ${cargoValue.toLocaleString()} CR` : 
-                    'Market not available';
-            }
-            
-            let threatLevel = "Low";
-            let pirateChance = 0.4;
-            if (this.gameState.currentSystem.security === 'low') {
-                threatLevel = "High";
-                pirateChance = 0.5;
-            } else if (this.gameState.currentSystem.security === 'medium') {
-                threatLevel = "Medium";
-                pirateChance = 0.4;
-            } else {
-                threatLevel = "Low";
-                pirateChance = 0.3;
-            }
-            if (overviewThreat) overviewThreat.textContent = threatLevel;
-            if (overviewPirateChance) overviewPirateChance.textContent = `${Math.round(pirateChance * 100)}%`;
-            
-            if (nearbySystems) {
-                nearbySystems.innerHTML = '';
-                const nearby = this.gameState.galaxy.filter(system => {
-                    if (system === this.gameState.currentSystem) return false;
-                    const distance = this.gameState.calculateDistance(this.gameState.currentSystem, system);
-                    return distance <= 50 && system.discovered;
-                });
-                
-                nearby.sort((a, b) => {
-                    const distA = this.gameState.calculateDistance(this.gameState.currentSystem, a);
-                    const distB = this.gameState.calculateDistance(this.gameState.currentSystem, b);
-                    return distA - distB;
-                });
-                
-                nearby.slice(0, 5).forEach(system => {
-                    const distance = this.gameState.calculateDistance(this.gameState.currentSystem, system);
-                    const systemEl = document.createElement('div');
-                    systemEl.className = 'system-overview-item';
-                    systemEl.innerHTML = `
-                        <div><strong>${system.name}</strong></div>
-                        <div>${Math.round(distance)} LY</div>
-                        <div>${system.economy.charAt(0).toUpperCase() + system.economy.slice(1)}</div>
-                        <div>Security: ${system.security.charAt(0).toUpperCase() + system.security.slice(1)}</div>
-                    `;
-                    nearbySystems.appendChild(systemEl);
-                });
-                
-                if (nearby.length === 0) {
-                    nearbySystems.innerHTML = '<div style="text-align: center; padding: 10px; color: #8888ff;">No discovered systems nearby</div>';
-                }
-            }
         }
-    }
+    
+    handleTrade(id, type) {
+            // Ensure marketQtyMode is set (default to 1 if undefined)
+            const qty = this.marketQtyMode || 1;
+            
+            const res = this.gameState.tradeItem(id, type, qty);
+            
+            this.showNotification(res.message);
+            this.updateUI();
+        }
 
-    updateContractsList() {
-        const contractsList = document.getElementById('contracts-list');
-        if (!contractsList) return;
+    updateCargoUI() {
+        const hold = document.getElementById('cargo-hold');
+        if(!hold) return;
+        hold.innerHTML = '';
         
-        contractsList.innerHTML = '';
-        
-        if (this.gameState.contracts.length === 0) {
-            contractsList.innerHTML = '<div style="text-align: center; padding: 10px; color: #8888ff;">No contracts available</div>';
+        if(this.gameState.cargo.length === 0) {
+            hold.innerHTML = '<div style="padding:10px; text-align:center; color:#555;">Cargo Hold Empty</div>';
             return;
         }
         
-        this.gameState.contracts.forEach(contract => {
-            if (contract.completed) return;
+        this.gameState.cargo.forEach(c => {
+            const div = document.createElement('div');
+            div.className = 'cargo-item';
             
-            const contractEl = document.createElement('div');
-            contractEl.className = 'contract-item';
+            // We can always sell if there is a market, even if they don't sell THAT item? 
+            // Usually yes, merchants buy anything. But if your game logic requires the item to be in the market list:
+            const canSell = this.gameState.currentSystem.hasMarket && this.gameState.currentSystem.market[c.id];
             
-            let buttonText = "Accept";
-            if (contract.type === 'delivery' && contract.originSystem === this.gameState.currentSystem) {
-                buttonText = "Pick Up";
-            } else if (contract.type === 'delivery' && contract.targetSystem === this.gameState.currentSystem) {
-                buttonText = "Deliver";
-            }
-            
-            contractEl.innerHTML = `
-                <div class="contract-header">
-                    <h3>${contract.name}</h3>
-                    <div class="contract-reward">${contract.reward.toLocaleString()} CR</div>
+            div.innerHTML = `
+                <span>${c.name} ${c.illegal ? '⚠️' : ''}</span>
+                <span>${c.quantity}</span>
+                <div style="display:flex; gap:5px;">
+                    <button class="btn btn-sell small" title="Sell 1 Unit" ${canSell ? '' : 'disabled'}>SELL</button>
+                    <button class="btn small" title="Jettison Cargo" style="color:#888; border-color:#444;"><i class="fas fa-trash"></i></button>
                 </div>
-                <div class="contract-details">${contract.description}</div>
-                <button class="btn contract-button" data-contract="${contract.id}">${buttonText}</button>
             `;
-            contractsList.appendChild(contractEl);
+            
+            // Bind Sell One
+            const btnSell = div.querySelector('.btn-sell');
+            btnSell.onclick = () => this.handleTrade(c.id, 'sell-one');
+
+            // Bind Drop
+            const btnDrop = div.querySelectorAll('button')[1]; // The trash button
+            btnDrop.onclick = () => {
+                const res = this.gameState.dropItem(c.id);
+                this.showNotification(res.message);
+                this.updateUI();
+            };
+
+            hold.appendChild(div);
         });
     }
+    
+    updateShipyardUI() {
+        const container = document.querySelector('.shipyard-tab');
+        if (!container) return;
+        
+        // Clear previous content (but keep the header if it's static in HTML, 
+        // though we usually rebuild the panel content in these methods)
+        container.innerHTML = '';
+
+        const sys = this.gameState.currentSystem;
+        const ship = this.gameState.ship;
+
+        // --- 1. SHIP OVERVIEW SECTION ---
+        const shipSection = document.createElement('div');
+        shipSection.className = 'ship-overview-panel';
+        
+        // Calculate derived stats
+        const cargoUsed = this.gameState.cargo.reduce((a,b)=>a+b.quantity,0);
+        const evasionChance = ship.evasion; 
+        
+        shipSection.innerHTML = `
+            <div class="ship-visual">
+                <i class="fas fa-space-shuttle ship-icon-large"></i>
+                <div class="ship-name">MK-IV INTERCEPTOR</div>
+                <div class="ship-class">Class: Frigate</div>
+            </div>
+            
+            <div class="ship-stats-detailed">
+                <div class="stat-row">
+                    <span class="stat-label"><i class="fas fa-shield-alt"></i> HULL</span>
+                    <div class="stat-bar-container">
+                        <div class="stat-bar-fill" style="width:${(ship.hull/ship.maxHull)*100}%; background:var(--accent-danger);"></div>
+                    </div>
+                    <span class="stat-val">${Math.round(ship.hull)}/${ship.maxHull}</span>
+                </div>
+
+                <div class="stat-row">
+                    <span class="stat-label"><i class="fas fa-sun"></i> SHIELDS</span>
+                    <div class="stat-bar-container">
+                        <div class="stat-bar-fill" style="width:${Math.min(100, ship.shields)}%; background:var(--accent-primary);"></div>
+                    </div>
+                    <span class="stat-val">${ship.shields} PWR</span>
+                </div>
+
+                <div class="stat-row">
+                    <span class="stat-label"><i class="fas fa-gas-pump"></i> FUEL</span>
+                    <div class="stat-bar-container">
+                        <div class="stat-bar-fill" style="width:${(this.gameState.fuel/this.gameState.maxFuel)*100}%; background:var(--accent-warning);"></div>
+                    </div>
+                    <span class="stat-val">${Math.floor(this.gameState.fuel)}/${this.gameState.maxFuel}</span>
+                </div>
+
+                <div class="stat-grid-small">
+                    <div class="mini-stat" title="Combat Damage">
+                        <i class="fas fa-crosshairs"></i> <span>DMG: ${ship.damage}</span>
+                    </div>
+                    <div class="mini-stat" title="Evasion Chance">
+                        <i class="fas fa-wind"></i> <span>EVA: ${evasionChance}%</span>
+                    </div>
+                    <div class="mini-stat" title="Sensor Range">
+                        <i class="fas fa-satellite-dish"></i> <span>RDR: Lvl ${ship.radar}</span>
+                    </div>
+                    <div class="mini-stat" title="Cargo Capacity">
+                        <i class="fas fa-box"></i> <span>CAP: ${cargoUsed}/${this.gameState.cargoCapacity}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(shipSection);
+
+        // --- 2. UPGRADES MARKET SECTION ---
+        const upgradeHeader = document.createElement('h2');
+        upgradeHeader.innerHTML = `<i class="fas fa-tools"></i> ENGINEERING BAY`;
+        upgradeHeader.style.marginTop = '20px';
+        container.appendChild(upgradeHeader);
+
+        // Check if shipyard exists
+        if (!sys.hasShipyard) {
+            const noService = document.createElement('div');
+            noService.className = 'no-service-msg';
+            noService.innerHTML = `
+                <i class="fas fa-lock"></i>
+                <p>SHIPYARD SERVICES UNAVAILABLE IN THIS SYSTEM</p>
+                <small>Travel to Industrial or Tech worlds.</small>
+            `;
+            container.appendChild(noService);
+            return;
+        }
+
+        // List Upgrades
+        const list = document.createElement('div');
+        list.className = 'upgrade-list';
+
+        this.gameState.upgrades.forEach(u => {
+            const item = document.createElement('div');
+            item.className = 'upgrade-item';
+            
+            // 1. Get Stats
+            const currentLvl = this.gameState.ship.upgrades[u.id] || 0;
+            const cost = u.cost; // You can add scaling here: u.cost * (currentLvl + 1)
+            const canAfford = this.gameState.credits >= cost;
+            
+            // 2. Render HTML
+            item.innerHTML = `
+                <div class="upgrade-icon"><i class="${u.icon}"></i></div>
+                <div class="upgrade-info">
+                    <div class="upgrade-name">
+                        ${u.name} 
+                        <span class="lvl-badge">LVL ${currentLvl}</span>
+                    </div>
+                    <div class="upgrade-desc">${u.description}</div>
+                    <div class="upgrade-bonus">Effect: +${u.effect} (Total: +${u.effect * currentLvl})</div>
+                </div>
+                <div class="upgrade-action">
+                    <div class="upgrade-cost ${canAfford ? 'text-success' : 'text-danger'}">${cost.toLocaleString()} CR</div>
+                    <button class="btn btn-buy small" ${canAfford ? '' : 'disabled'}>UPGRADE</button>
+                </div>
+            `;
+            
+            // 3. Bind Click
+            item.querySelector('button').onclick = () => {
+                const res = this.gameState.upgradeShip(u.id);
+                this.showNotification(res.message);
+                this.updateUI();
+            };
+            
+            list.appendChild(item);
+        });
+        
+        container.appendChild(list);
+    }
+    
+    updateOverviewUI() {
+        const sys = this.gameState.currentSystem;
+        const el = (id, txt) => { const e = document.getElementById(id); if(e) e.textContent = txt; };
+        
+        el('current-system-name', sys.name);
+        el('current-system-economy', `Economy: ${sys.economy}`);
+        el('current-system-security', `Security: ${sys.security}`);
+        
+        el('overview-fuel', `Fuel: ${Math.floor(this.gameState.fuel)}`);
+        
+        let refuelCost = 0;
+        if(sys.hasRefuel && this.gameState.fuel < this.gameState.maxFuel) {
+            const missing = this.gameState.maxFuel - this.gameState.fuel;
+            refuelCost = Math.floor(missing * 10);
+        }
+        el('overview-refuel-cost', sys.hasRefuel ? `Refuel Cost: ~${refuelCost} CR` : "Refueling Unavailable");
+        
+        const threat = sys.security === 'low' ? "HIGH" : (sys.security === 'medium' ? "MODERATE" : "LOW");
+        el('overview-threat', `Threat: ${threat}`);
+        el('overview-pirate-chance', `Pirate Risk: ${sys.security === 'low' ? '50%' : '10%'}`);
+        
+        // Nearby Systems
+        const list = document.getElementById('nearby-systems');
+        if(list) {
+            list.innerHTML = '';
+            const nearby = this.gameState.galaxy
+                .filter(s => s !== sys && s.discovered)
+                .map(s => ({ system: s, dist: this.gameState.calculateDistance(sys, s) }))
+                .filter(item => item.dist < 50)
+                .sort((a,b) => a.dist - b.dist)
+                .slice(0, 5);
+                
+            if(nearby.length === 0) {
+                list.innerHTML = '<div style="color:#555; padding:5px;">No known systems in short range scanners.</div>';
+            } else {
+                nearby.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'system-overview-item';
+                    div.innerHTML = `
+                        <div style="display:flex; justify-content:space-between;">
+                            <span style="color:#6cf; font-weight:bold;">${item.system.name}</span>
+                            <span style="color:#aaa;">${Math.round(item.dist)} LY</span>
+                        </div>
+                        <div style="font-size:11px; color:#888;">${item.system.economy}</div>
+                    `;
+                    list.appendChild(div);
+                });
+            }
+        }
+    }
+    
+    updateContractsUI() {
+        const list = document.getElementById('contracts-list');
+        if(!list) return;
+        list.innerHTML = '';
+        
+        if(this.gameState.contracts.length === 0) {
+            list.innerHTML = '<div style="text-align:center; color:#555; padding:20px;">No contracts available in this sector.</div>';
+            return;
+        }
+        
+        this.gameState.contracts.forEach(c => {
+            if(c.completed) return;
+            
+            const div = document.createElement('div');
+            div.className = 'contract-item';
+            const icon = c.type === 'hunt' ? '☠️' : '📦';
+            
+            div.innerHTML = `
+                <div class="contract-header">
+                    <span>${icon} ${c.name}</span>
+                    <span class="contract-reward">${c.reward.toLocaleString()} CR</span>
+                </div>
+                <div class="contract-details">${c.description}</div>
+                <button class="contract-button btn">ACCEPT CONTRACT</button>
+            `;
+            
+            div.querySelector('button').onclick = () => {
+                const res = this.gameState.handleContract(c.id);
+                this.showNotification(res.message);
+                this.updateUI();
+            };
+            list.appendChild(div);
+        });
+    }
+
+    // =========================================
+    // UTILITIES & EVENT BINDING
+    // =========================================
 
     showNotification(message) {
         const notification = document.getElementById('notification');
@@ -985,193 +754,124 @@ export class UI {
         }, 3000);
     }
 
-    // Find the showSystemInfo method and replace it with this:
-    showSystemInfo(system) {
-        const pointer = document.getElementById('hover-pointer');
-        const content = pointer ? pointer.querySelector('.hover-details') : null;
-        
-        if (!pointer || !content || !this.galaxyCanvas) return;
-
-        // 1. Calculate Screen Position (Snapping to Star, not Mouse)
-        const w = this.galaxyCanvas.clientWidth;
-        const h = this.galaxyCanvas.clientHeight;
-        const cx = w / 2;
-        const cy = h / 2;
-
-        // World -> Screen projection
-        const screenX = (system.x - this.camera.x) * this.camera.zoom + cx;
-        const screenY = (system.y - this.camera.y) * this.camera.zoom + cy;
-
-        // 2. Build Content
-        if (!system.discovered) {
-            content.innerHTML = `
-                <div style="color: #ffcc66; font-weight:bold; border-bottom:1px solid #555; padding-bottom:2px; margin-bottom:2px;">Unknown System</div>
-                <div style="color: #aaa; font-style:italic;">Undiscovered</div>
-            `;
-        } else {
-            const services = [];
-            if (system.hasShipyard) services.push('<i class="fas fa-wrench"></i>');
-            if (system.hasRefuel) services.push('<i class="fas fa-gas-pump"></i>');
-            if (system.hasMarket) services.push('<i class="fas fa-shopping-cart"></i>');
-            
-            content.innerHTML = `
-                <div style="color: #66ccff; font-weight:bold; border-bottom:1px solid #446688; padding-bottom:3px; margin-bottom:3px;">${system.name}</div>
-                <div class="hover-row"><span class="hover-label">Economy:</span> <span class="hover-val" style="color:${this._getEconomyColor(system.economy)}">${system.economy}</span></div>
-                <div class="hover-row"><span class="hover-label">Security:</span> <span class="hover-val">${system.security}</span></div>
-                <div class="hover-row"><span class="hover-label">Tech:</span> <span class="hover-val">${system.techLevel}</span></div>
-                <div class="hover-row" style="margin-top:2px;"><span class="hover-label">Services:</span> <span class="hover-val">${services.join(' ') || '-'}</span></div>
-            `;
-        }
-
-        // 3. Position the Pointer
-        pointer.style.display = 'flex';
-        pointer.style.left = `${screenX}px`;
-        // Position slightly above the star (radius approx 6px + padding)
-        pointer.style.top = `${screenY - 20}px`; 
-        pointer.style.transform = 'translate(-50%, -100%)'; // Anchor bottom-center
-    }
-
-    hideSystemInfo() {
-        const pointer = document.getElementById('hover-pointer');
-        if (pointer) pointer.style.display = 'none';
-    }
-
     setupAppEventListeners() {
-        // Open Galaxy Map
-        const mapBtn = document.getElementById('open-map-btn');
-        if (mapBtn) {
-            mapBtn.addEventListener('click', () => {
-                if (isTraveling) {
-                    this.showNotification("Cannot open map while traveling!");
-                    return;
-                }
-                this.galaxyMap.open();
-            });
-        }
-
+        // 1. Travel Button
         const travelBtn = document.getElementById('travel-btn');
         if (travelBtn) travelBtn.addEventListener('click', () => {
-            if (isTraveling) {
-                this.showNotification("Already traveling!");
-                return;
-            }
-
+            if (isTraveling) return;
+            
             if (!this.gameState.targetSystem) {
-                this.showNotification("Select a system to travel to!");
-                return;
-            }
-
-            const result = this.gameState.travelToSystem();
-            if (!result.success) {
-                this.showNotification(result.message);
+                this.showNotification("No destination set!");
                 return;
             }
             
-            isTraveling = true;
-            document.querySelectorAll('button').forEach(btn => {
-                btn.disabled = true;
-            });
-            document.querySelector('.ui-panel').classList.add('traveling');
-
-            this.showNotification(result.message);
+            const res = this.gameState.travelToSystem();
+            if (!res.success) {
+                this.showNotification(res.message);
+                return;
+            }
             
-            const startTime = Date.now();
-            const travelDuration = 2000 * this.gameState.calculateDistance(this.gameState.currentSystem, this.gameState.targetSystem);
-            
-            const animateTravel = () => {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / travelDuration, 1);
-                const easedProgress = easeInOutCubic(progress);
-                this.gameState.ship.travelProgress = easedProgress;
-                
-                if (this.shipIndicatorEl) {
-                    this.gameState.ship.x = this.gameState.currentSystem.x + (this.gameState.targetSystem.x - this.gameState.currentSystem.x) * easedProgress;
-                    this.gameState.ship.y = this.gameState.currentSystem.y + (this.gameState.targetSystem.y - this.gameState.currentSystem.y) * easedProgress;
-                    
-                    this.updateShipPosition();
-                    this.shipIndicatorEl.style.transform = `rotate(${this.gameState.ship.rotation}deg)`;
-                }
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateTravel);
-                } else {
-                    isTraveling = false;
-                    document.querySelectorAll('button').forEach(btn => {
-                        btn.disabled = false;
-                    });
-                    document.querySelector('.ui-panel').classList.remove('traveling');
-                    
-                    const result = this.gameState.completeTravel();
-                    this.showNotification(result.message);
-                    
-                    if (!this.gameState.currentSystem.discovered) {
-                        this.gameState.currentSystem.discovered = true;
-                        this.galaxyMap.setup(); 
-                        this.scheduleUpdate();
-                    }
-                    
-                    let pirateChance = 0.4;
-                    if (this.gameState.currentSystem.security === 'low') pirateChance = 0.5;
-                    else if (this.gameState.currentSystem.security === 'high') pirateChance = 0.3;
-                    
-                    if (Math.random() < pirateChance) {
-                        const encounter = this.encounterManager.getRandomEncounter();
-                        this.encounterManager.startEncounter(encounter.type);
-                    }
-                    
-                    this.updateUI();
-                }
-            };
-            
-            animateTravel();
+            this.performTravelAnimation(res);
         });
         
+        // 2. Refuel Button
         const refuelBtn = document.getElementById('refuel-btn');
-        if (refuelBtn) refuelBtn.addEventListener('click', () => {
-            if (!this.gameState.currentSystem.hasRefuel) {
-                this.showNotification("Refuel services not available!");
-                return;
-            }
-            
-            const result = this.gameState.refuelShip();
-            this.showNotification(result.message);
+        if(refuelBtn) refuelBtn.addEventListener('click', () => {
+            const res = this.gameState.refuelShip();
+            this.showNotification(res.message);
             this.updateUI();
         });
         
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('contract-button')) {
-                const contractId = e.target.dataset.contract;
-                const result = this.gameState.handleContract(contractId);
-                this.showNotification(result.message);
-                this.updateUI();
-            }
-        });
-        
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('combat-btn')) {
-                const action = e.target.dataset.action;
-                if (action) {
-                    this.encounterManager.handleEncounterAction(action);
+        // 2. NEW: SCAN BUTTON LISTENER
+        const scanBtn = document.getElementById('scan-btn');
+        if (scanBtn) {
+            scanBtn.addEventListener('click', () => {
+                if (isTraveling) return;
+
+                // Trigger visual scan effect on map (optional, strictly functional for now)
+                const res = this.gameState.scanNearbySystems();
+                
+                this.showNotification(res.message);
+                
+                // If successful, update the UI to show new systems on map/list
+                if (res.success) {
+                    this.updateUI();
+                    
+                    // Force a re-render of the map to show new stars immediately
+                    if (this.galaxyMap) this.galaxyMap.render();
                 }
-            }
-        });
-        
-        const tabs = document.querySelectorAll('.tab');
-        if (tabs && tabs.length > 0) {
-            tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    
-                    document.querySelectorAll('.panel-section').forEach(section => {
-                        section.style.display = 'none';
-                    });
-                    
-                    const tabName = tab.dataset.tab;
-                    const activeTab = document.querySelector(`.${tabName}-tab`);
-                    if (activeTab) activeTab.style.display = 'block';
-                });
             });
         }
+
+        // 3. Tab Switching
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                document.querySelectorAll('.panel-section').forEach(s => s.style.display = 'none');
+                const target = document.querySelector(`.${tab.dataset.tab}-tab`);
+                if(target) target.style.display = 'block';
+            });
+        });
+    }
+    
+    /**
+     * Visual sequence for traveling.
+     * Animates ship movement and handles arrival logic.
+     */
+    performTravelAnimation(res) {
+        this.showNotification(res.message);
+        document.querySelector('.ui-panel').classList.add('traveling');
+        
+        const startPos = {x: this.gameState.ship.x, y: this.gameState.ship.y};
+        const endPos = {x: this.gameState.targetSystem.x, y: this.gameState.targetSystem.y};
+        
+        const duration = 1500 + (res.distance * 20); 
+        const startTime = Date.now();
+        
+        const animate = () => {
+            const now = Date.now();
+            const p = Math.min((now - startTime) / duration, 1);
+            
+            // Easing function (local or imported)
+            const ease = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+            
+            // Interpolate
+            this.gameState.ship.x = startPos.x + (endPos.x - startPos.x) * ease;
+            this.gameState.ship.y = startPos.y + (endPos.y - startPos.y) * ease;
+            
+            // Rotate ship
+            const dx = endPos.x - startPos.x;
+            const dy = endPos.y - startPos.y;
+            this.gameState.ship.rotation = (Math.atan2(dy, dx) * 180 / Math.PI);
+            
+            this.centerCameraOnShip();
+            
+            if(p < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                // === ARRIVAL ===
+                document.querySelector('.ui-panel').classList.remove('traveling');
+                
+                this.gameState.completeTravel();
+                this.showNotification(`Arrived at ${this.gameState.currentSystem.name}`);
+                this.updateUI();
+                
+                // === CRITICAL FIX: TRIGGER ENCOUNTER LOGIC ===
+                // We delegate the decision entirely to EncounterManager
+                if (this.encounterManager.shouldTriggerEncounter()) {
+                    // Delay slightly so the "Arrived" notification isn't instantly covered
+                    setTimeout(() => {
+                        const encounterData = this.encounterManager.getRandomEncounter();
+                        this.encounterManager.startEncounter(encounterData.type);
+                    }, 500);
+                }
+            }
+        };
+        
+        animate();
     }
 }
+/* --- END OF FILE ui.js --- */

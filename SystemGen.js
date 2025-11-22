@@ -1,10 +1,12 @@
-// SystemGen.js
+/* --- START OF FILE SystemGen.js --- */
+
 export const EconomyProfiles = {
     agricultural: {
+        color: '#66ff66', // Green
         weight: 10,
         techLevelWeights: [0, 4, 5, 1],
         securityLevelWeights: [0, 5, 4, 1],
-        hasShipyardChance: 0.3,
+        hasShipyardChance: 0,
         hasRefuel: true,
         hasMarket: true,
         marketModifiers: {
@@ -16,10 +18,11 @@ export const EconomyProfiles = {
         description: "Fertile worlds focused on food production"
     },
     industrial: {
+        color: '#ff9933', // Orange
         weight: 8,
         techLevelWeights: [0, 3, 6, 1],
         securityLevelWeights: [0, 4, 5, 1],
-        hasShipyardChance: 0.7,
+        hasShipyardChance: 0.5,
         hasRefuel: true,
         hasMarket: true,
         marketModifiers: {
@@ -31,10 +34,11 @@ export const EconomyProfiles = {
         description: "Manufacturing hubs with heavy industry"
     },
     tech: {
+        color: '#4488ff', // Blue
         weight: 7,
         techLevelWeights: [0, 1, 4, 5],
         securityLevelWeights: [0, 3, 4, 3],
-        hasShipyardChance: 0.6,
+        hasShipyardChance: 0.75,
         hasRefuel: true,
         hasMarket: true,
         marketModifiers: {
@@ -46,10 +50,11 @@ export const EconomyProfiles = {
         description: "Advanced research and development centers"
     },
     mining: {
+        color: '#ffff66', // Yellow
         weight: 9,
         techLevelWeights: [0, 5, 4, 1],
         securityLevelWeights: [0, 4, 5, 1],
-        hasShipyardChance: 0.5,
+        hasShipyardChance: 0.05,
         hasRefuel: true,
         hasMarket: true,
         marketModifiers: {
@@ -61,10 +66,11 @@ export const EconomyProfiles = {
         description: "Resource extraction operations on mineral-rich worlds"
     },
     trade: {
+        color: '#cc66ff', // Purple
         weight: 6,
         techLevelWeights: [0, 2, 5, 3],
         securityLevelWeights: [0, 3, 5, 2],
-        hasShipyardChance: 0.4,
+        hasShipyardChance: 0.05,
         hasRefuel: true,
         hasMarket: true,
         marketModifiers: {
@@ -76,10 +82,11 @@ export const EconomyProfiles = {
         description: "Commercial hubs and free trade zones"
     },
     military: {
+        color: '#ff4444', // Red
         weight: 5,
         techLevelWeights: [0, 1, 3, 6],
         securityLevelWeights: [0, 1, 3, 6],
-        hasShipyardChance: 0.9,
+        hasShipyardChance: 0.5,
         hasRefuel: true,
         hasMarket: true,
         marketModifiers: {
@@ -90,6 +97,7 @@ export const EconomyProfiles = {
         description: "Strategic defense installations and naval bases"
     },
     unpopulated: {
+        color: '#ffffe0', // Light Yellow
         weight: 4,
         techLevelWeights: [10, 0, 0, 0],
         securityLevelWeights: [10, 0, 0, 0],
@@ -100,6 +108,7 @@ export const EconomyProfiles = {
         description: "Uninhabited systems with no established infrastructure"
     },
     custom: {
+        color: '#ffffff', // White
         weight: 0,
         fixedProperties: true,
         description: "Unique systems with special properties"
@@ -110,8 +119,8 @@ export const CustomSystems = [
     {
         name: "Earth Prime",
         economy: "custom",
-        x: 350,
-        y: 275,
+        x: 400,
+        y: 300,
         techLevel: "high",
         security: "high",
         hasShipyard: true,
@@ -127,8 +136,8 @@ export const CustomSystems = [
     {
         name: "Neo Titan",
         economy: "custom",
-        x: 650,
-        y: 400,
+        x: 700,
+        y: 450,
         techLevel: "medium",
         security: "low",
         hasShipyard: true,
@@ -145,68 +154,40 @@ export const CustomSystems = [
 
 export const getWeightedRandom = (items, weights) => {
     if (!weights || weights.length === 0) return items[0];
-    
     const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
     let random = Math.random() * totalWeight;
-    
     for (let i = 0; i < items.length; i++) {
-        if (random < weights[i]) {
-            return items[i];
-        }
+        if (random < weights[i]) return items[i];
         random -= weights[i];
     }
-    
     return items[0];
 };
 
 export const generateSystemName = () => {
-    const prefixes = ['New', 'Old', 'Great', 'Little', 'Upper', 'Lower', 'East', 
-                     'West', 'North', 'South', 'Elder', 'Ancestor', 'High'];
-    const suffixes = ['Prime', 'Secundus', 'Tertius', 'Quartus', 'Quintus', 'Alpha',
-                     'Beta', 'Gamma', 'Delta', 'Epsilon', 'Psy', 'Jeta', 'Nigmus'];
-    const nameParts = ['Vega', 'Sirius', 'Orion', 'Centauri', 'Andromeda', 'Persei',
-                       'Cygni', 'Draconis', 'Lyrae', 'Aquilae', 'Pegasi', 'Tauri'];
+    const prefixes = ['New', 'Old', 'Great', 'Little', 'Upper', 'Lower', 'East', 'West', 'North', 'South', 'Elder', 'Ancestor', 'High'];
+    const suffixes = ['Prime', 'Secundus', 'Tertius', 'Quartus', 'Quintus', 'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Psy', 'Jeta', 'Nigmus'];
+    const nameParts = ['Vega', 'Sirius', 'Orion', 'Centauri', 'Andromeda', 'Persei', 'Cygni', 'Draconis', 'Lyrae', 'Aquilae', 'Pegasi', 'Tauri'];
     
     const pattern = Math.random();
-    if (pattern < 0.3) {
-        return `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${
-                suffixes[Math.floor(Math.random() * suffixes.length)]}`;
-    }
-    if (pattern < 0.6) {
-        return `${nameParts[Math.floor(Math.random() * nameParts.length)]} ${
-                1000 + Math.floor(Math.random() * 9000)}`;
-    }
-    return `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${
-            nameParts[Math.floor(Math.random() * nameParts.length)]}`;
+    if (pattern < 0.3) return `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${suffixes[Math.floor(Math.random() * suffixes.length)]}`;
+    if (pattern < 0.6) return `${nameParts[Math.floor(Math.random() * nameParts.length)]} ${1000 + Math.floor(Math.random() * 9000)}`;
+    return `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${nameParts[Math.floor(Math.random() * nameParts.length)]}`;
 };
 
 export const generatePosition = (width, height, minDist, existingPoints) => {
     let attempts = 0;
     let newPoint;
-    
-    while (attempts < 100) {
-        newPoint = {
-            x: 100 + Math.random() * (width - 200),
-            y: 100 + Math.random() * (height - 200)
-        };
-        
+    while (attempts < 20) {
+        newPoint = { x: 100 + Math.random() * (width - 200), y: 100 + Math.random() * (height - 200) };
         let valid = true;
-        for (const point of existingPoints) {
+        for (let i = existingPoints.length - 1; i >= 0; i--) {
+            const point = existingPoints[i];
             const dx = point.x - newPoint.x;
             const dy = point.y - newPoint.y;
-            if (Math.sqrt(dx*dx + dy*dy) < minDist) {
-                valid = false;
-                break;
-            }
+            if ((dx*dx + dy*dy) < minDist*minDist) { valid = false; break; }
         }
-        
         if (valid) return newPoint;
         attempts++;
     }
-    
-    // Fallback if no valid position found
-    return {
-        x: 100 + Math.random() * (width - 200),
-        y: 100 + Math.random() * (height - 200)
-    };
+    return { x: 100 + Math.random() * (width - 200), y: 100 + Math.random() * (height - 200) };
 };

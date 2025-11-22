@@ -1,3 +1,5 @@
+/* --- START OF FILE CombatEncounter.js --- */
+
 import { Encounter } from './Encounter.js';
 
 export class CombatEncounter extends Encounter {
@@ -5,268 +7,243 @@ export class CombatEncounter extends Encounter {
         super(player, gameState, {
             ...options,
             type: options.type || 'combat',
-            title: options.title || 'COMBAT ENCOUNTER',
-            iconClass: options.iconClass || 'fa-skull'
+            title: options.title || 'COMBAT ALERT',
+            iconClass: options.iconClass || 'fa-crosshairs'
         });
         
         this.opponent = opponent;
+        
+        // Snapshot player stats so we don't mutate global state until end
+        // (Except hull/shields which act as health)
         this.playerStats = {
             hull: player.hull,
+            maxHull: player.maxHull,
+            shields: player.shields,
             damage: player.damage,
-            evasion: player.evasion,
-            shields: player.shields
+            evasion: player.evasion
         };
+
+        // Normalize opponent stats
         this.opponentStats = {
             hull: opponent.hull,
-            damage: opponent.damage,
+            maxHull: opponent.maxHull || opponent.hull,
+            damage: opponent.damage || 5,
             accuracy: opponent.accuracy || 60
         };
+
+        this.turnLocked = false;
     }
 
     renderContent(contentEl) {
+        if (!contentEl) return;
+
+        // Using flexbox for side-by-side view
         contentEl.innerHTML = `
-            <div class="ships-container">
-                <div class="ship-display">
-                    <div class="ship-icon"><i class="fas fa-rocket"></i></div>
-                    <h3>Your Ship</h3>
-                    <div class="ship-stats">
-                        <div>Hull: <span id="player-hull">${this.playerStats.hull}%</span></div>
-                        <div>Damage: <span id="player-damage">${this.playerStats.damage}</span></div>
-                        <div>Evasion: <span id="player-evasion">${this.playerStats.evasion}%</span></div>
-                        <div>Shields: <span id="player-shields">${this.playerStats.shields}%</span></div>
+            <div style="display: flex; gap: 15px; align-items: stretch; margin-bottom: 15px;">
+                <!-- PLAYER CARD -->
+                <div style="flex:1; background:rgba(0,0,0,0.3); padding:10px; border-left:3px solid #66ccff; text-align:left;">
+                    <div style="color:#66ccff; font-weight:bold; font-size:12px;">COMMANDER</div>
+                    
+                    <div style="margin-top:5px; font-size:11px;">HULL</div>
+                    <div style="background:#222; height:6px; width:100%; margin-bottom:2px;">
+                        <div id="p-hull-bar" style="background:#66ccff; height:100%; width:${(this.playerStats.hull/this.playerStats.maxHull)*100}%"></div>
                     </div>
+                    <div id="p-hull-text" style="text-align:right; font-size:10px;">${Math.round(this.playerStats.hull)}/${this.playerStats.maxHull}</div>
+
+                    <div style="margin-top:5px; font-size:11px;">SHIELDS: <span id="p-shields-text" style="color:#fff;">${this.playerStats.shields}</span></div>
                 </div>
-                <div class="ship-display">
-                    <div class="ship-icon"><i class="fas ${this.opponent.icon || 'fa-pirate-ship'}"></i></div>
-                    <h3 id="opponent-name">${this.opponent.name}</h3>
-                    <div class="ship-stats">
-                        <div>Hull: <span id="opponent-hull">${this.opponentStats.hull}%</span></div>
-                        <div>Damage: <span id="opponent-damage">${this.opponentStats.damage}</span></div>
-                        <div>Accuracy: <span id="opponent-accuracy">${this.opponentStats.accuracy}%</span></div>
-                        <div>Tier: <span id="opponent-tier">${this.opponent.tier ? 'T' + this.opponent.tier : ''}</span></div>
+
+                <!-- VS ICON -->
+                <div style="display:flex; align-items:center; justify-content:center; color:#555; font-weight:900; font-size:18px;">VS</div>
+
+                <!-- ENEMY CARD -->
+                <div style="flex:1; background:rgba(0,0,0,0.3); padding:10px; border-right:3px solid #ff6666; text-align:right;">
+                    <div style="color:#ff6666; font-weight:bold; font-size:12px;">${this.opponent.name}</div>
+                    
+                    <div style="margin-top:5px; font-size:11px;">HULL</div>
+                    <div style="background:#222; height:6px; width:100%; display:flex; justify-content:flex-end; margin-bottom:2px;">
+                        <div id="e-hull-bar" style="background:#ff6666; height:100%; width:${(this.opponentStats.hull/this.opponentStats.maxHull)*100}%"></div>
                     </div>
+                    <div id="e-hull-text" style="text-align:left; font-size:10px;">${Math.round(this.opponentStats.hull)}/${this.opponentStats.maxHull}</div>
+                    
+                    <div style="margin-top:5px; font-size:11px;">THREAT: <span style="color:#f66;">HIGH</span></div>
                 </div>
             </div>
         `;
     }
 
-    renderOptions() {
-        const optionsEl = document.getElementById('encounter-options');
+    renderOptions(optionsEl) {
         if (!optionsEl) return;
         
-        optionsEl.innerHTML = '';
-        
-        // Add combat action buttons
-        const actions = [
-            { id: 'attack', icon: 'fa-fist-raised', label: 'ATTACK', className: 'attack' },
-            { id: 'evade', icon: 'fa-sync-alt', label: 'EVADE', className: 'evade' },
-            { id: 'escape', icon: 'fa-running', label: 'ESCAPE', className: 'escape' }
-        ];
-        
-        actions.forEach(action => {
-            const button = document.createElement('button');
-            button.className = `combat-btn ${action.className}`;
-            button.innerHTML = `<i class="fas ${action.icon}"></i> ${action.label}`;
-            button.dataset.action = action.id;
-            optionsEl.appendChild(button);
-        });
-    }
-
-    processTurn(action) {
-        let result = {
-            playerDamage: 0,
-            opponentDamage: 0,
-            playerEffect: '',
-            opponentEffect: '',
-            encounterContinues: true
-        };
-        
-        switch (action) {
-            case 'attack':
-                result = this.handleAttack();
-                break;
-            case 'evade':
-                result = this.handleEvade();
-                break;
-            case 'escape':
-                result = this.handleEscape();
-                break;
-        }
-        
-        return result;
-    }
-
-    handleAttack() {
-        // Player attacks opponent
-        const damageDealt = Math.max(1, this.playerStats.damage - Math.floor(Math.random() * 3));
-        this.opponentStats.hull -= damageDealt;
-        
-        let playerEffect = `You deal ${damageDealt} damage!`;
-        let encounterContinues = true;
-        
-        // Check if opponent is defeated
-        if (this.opponentStats.hull <= 0) {
-            this.opponentStats.hull = 0;
-            playerEffect += `<br><strong>${this.opponent.name} destroyed!</strong>`;
-            encounterContinues = false;
-        }
-        
-        // Opponent attacks player (if still alive)
-        let opponentDamage = 0;
-        let opponentEffect = '';
-        
-        if (this.opponentStats.hull > 0 && Math.random() * 100 < this.opponentStats.accuracy) {
-            opponentDamage = Math.max(1, this.opponentStats.damage - Math.floor(Math.random() * 2));
-            
-            // Apply shield reduction
-            if (this.playerStats.shields > 0) {
-                const shieldReduction = Math.min(this.playerStats.shields, opponentDamage);
-                opponentDamage -= shieldReduction;
-                this.playerStats.shields -= shieldReduction;
-                opponentEffect += `Shields absorbed ${shieldReduction} damage!<br>`;
-            }
-            
-            this.playerStats.hull -= opponentDamage;
-            opponentEffect += `Opponent deals ${opponentDamage} damage!`;
-            
-            // Check if player is defeated
-            if (this.playerStats.hull <= 0) {
-                this.playerStats.hull = 0;
-                opponentEffect += `<br><strong>Your ship destroyed!</strong>`;
-                encounterContinues = false;
-            }
-        } else if (this.opponentStats.hull > 0) {
-            opponentEffect = "Opponent attack missed!";
-        }
-        
-        return {
-            playerDamage: damageDealt,
-            opponentDamage: opponentDamage,
-            playerEffect: playerEffect,
-            opponentEffect: opponentEffect,
-            encounterContinues: encounterContinues
-        };
-    }
-
-    handleEvade() {
-        let playerEffect = '';
-        let opponentDamage = 0;
-        let encounterContinues = true;
-        
-        // Attempt to evade
-        if (Math.random() * 100 < this.playerStats.evasion) {
-            playerEffect = "Evasion successful!";
-        } else {
-            opponentDamage = Math.max(1, this.opponentStats.damage - Math.floor(Math.random() * 2));
-            this.playerStats.hull -= opponentDamage;
-            playerEffect = `Evasion failed! ${opponentDamage} damage.`;
-            
-            // Check if player is defeated
-            if (this.playerStats.hull <= 0) {
-                this.playerStats.hull = 0;
-                playerEffect += `<br><strong>Your ship destroyed!</strong>`;
-                encounterContinues = false;
-            }
-        }
-        
-        return {
-            playerDamage: 0,
-            opponentDamage: opponentDamage,
-            playerEffect: playerEffect,
-            opponentEffect: '',
-            encounterContinues: encounterContinues
-        };
-    }
-
-    handleEscape() {
-        let playerEffect = '';
-        let opponentDamage = 0;
-        let encounterContinues = false;
-        
-        // Attempt to escape
-        if (Math.random() > 0.80) {
-            playerEffect = "Escape successful!";
-        } else {
-            opponentDamage = Math.max(3, this.opponentStats.damage + Math.floor(Math.random() * 5));
-            this.playerStats.hull -= opponentDamage;
-            playerEffect = `Escape failed! ${opponentDamage} damage.`;
-            
-            // Check if player is defeated
-            if (this.playerStats.hull <= 0) {
-                this.playerStats.hull = 0;
-                playerEffect += `<br><strong>Your ship destroyed!</strong>`;
-            } else {
-                encounterContinues = true;
-            }
-        }
-        
-        return {
-            playerDamage: 0,
-            opponentDamage: opponentDamage,
-            playerEffect: playerEffect,
-            opponentEffect: '',
-            encounterContinues: encounterContinues
-        };
+        optionsEl.innerHTML = `
+            <button class="combat-btn attack" data-action="attack" style="border-bottom:2px solid #a33;">
+                <i class="fas fa-crosshairs"></i> FIRE
+            </button>
+            <button class="combat-btn evade" data-action="evade" style="border-bottom:2px solid #38a;">
+                <i class="fas fa-shield-alt"></i> EVADE
+            </button>
+            <button class="combat-btn escape" data-action="flee" style="border-bottom:2px solid #555;">
+                <i class="fas fa-running"></i> FLEE
+            </button>
+        `;
     }
 
     updateStatsUI() {
-        const playerHullEl = document.getElementById('player-hull');
-        const playerDamageEl = document.getElementById('player-damage');
-        const playerEvasionEl = document.getElementById('player-evasion');
-        const playerShieldsEl = document.getElementById('player-shields');
-        const opponentHullEl = document.getElementById('opponent-hull');
-        const opponentDamageEl = document.getElementById('opponent-damage');
-        const opponentAccuracyEl = document.getElementById('opponent-accuracy');
+        const pPct = (this.playerStats.hull / this.playerStats.maxHull) * 100;
+        const ePct = (this.opponentStats.hull / this.opponentStats.maxHull) * 100;
+
+        const el = (id) => document.getElementById(id);
+
+        if(el('p-hull-bar')) el('p-hull-bar').style.width = `${Math.max(0, pPct)}%`;
+        if(el('e-hull-bar')) el('e-hull-bar').style.width = `${Math.max(0, ePct)}%`;
         
-        if (playerHullEl) playerHullEl.textContent = `${this.playerStats.hull}%`;
-        if (playerDamageEl) playerDamageEl.textContent = this.playerStats.damage;
-        if (playerEvasionEl) playerEvasionEl.textContent = `${this.playerStats.evasion}%`;
-        if (playerShieldsEl) playerShieldsEl.textContent = `${this.playerStats.shields}%`;
-        if (opponentHullEl) opponentHullEl.textContent = `${this.opponentStats.hull}%`;
-        if (opponentDamageEl) opponentDamageEl.textContent = this.opponentStats.damage;
-        if (opponentAccuracyEl) opponentAccuracyEl.textContent = `${this.opponentStats.accuracy}%`;
+        if(el('p-hull-text')) el('p-hull-text').textContent = `${Math.round(Math.max(0, this.playerStats.hull))}`;
+        if(el('e-hull-text')) el('e-hull-text').textContent = `${Math.round(Math.max(0, this.opponentStats.hull))}`;
+        
+        if(el('p-shields-text')) el('p-shields-text').textContent = this.playerStats.shields;
     }
 
     handleAction(action) {
-        if (action === 'close') {
-            this.end();
-            this.closeEncounterModal();
-            return;
-        }
-        
-        const result = this.processTurn(action);
-        
-        // Log results
-        if (result.playerEffect) this.log(result.playerEffect);
-        if (result.opponentEffect) this.log(result.opponentEffect);
-        
-        // Update UI
-        this.updateStatsUI();
-        
-        // Check if encounter should end
-        if (!result.encounterContinues) {
-            setTimeout(() => {
-                this.end();
-                this.closeEncounterModal();
-            }, 2000);
+        if (this.turnLocked) return;
+
+        switch(action) {
+            case 'attack':
+                this.performPlayerAttack();
+                break;
+            case 'evade':
+                this.performPlayerEvade();
+                break;
+            case 'flee':
+                this.performPlayerFlee();
+                break;
+            default:
+                super.handleAction(action);
         }
     }
-    
-    end(result = {}) {
-        const encounterResult = super.end(result);
+
+    // --- TURN LOGIC ---
+
+    performPlayerAttack() {
+        this.turnLocked = true;
         
-        // Update game state
-        this.gameState.ship.hull = this.playerStats.hull;
-        this.gameState.ship.shields = this.playerStats.shields;
+        // Damage calc with slight variance (0.9 to 1.1 multiplier)
+        const variance = 0.9 + (Math.random() * 0.2);
+        const dmg = Math.floor(this.playerStats.damage * variance);
+
+        this.opponentStats.hull -= dmg;
+        this.log(`Weapons fire hits target for <strong>${dmg}</strong> damage!`, '#66ccff');
+        this.updateStatsUI();
+
+        if (this.checkWinCondition()) return;
+
+        // Pass turn to enemy
+        setTimeout(() => this.performEnemyTurn(), 800);
+    }
+
+    performPlayerEvade() {
+        this.turnLocked = true;
+        this.log(`Initiating evasive maneuvers...`, '#ffcc66');
         
-        // Update UI
-        this.updateMainUI();
-        
-        // Check for game over
-        if (this.gameState.ship.hull <= 0) {
-            this.showGameOverScreen();
+        // Boost evasion for next turn only
+        const baseEvasion = this.playerStats.evasion;
+        this.playerStats.evasion += 35; // Significant boost
+
+        setTimeout(() => {
+            this.performEnemyTurn();
+            // Restore evasion after enemy attack is calculated
+            this.playerStats.evasion = baseEvasion;
+        }, 800);
+    }
+
+    performPlayerFlee() {
+        this.turnLocked = true;
+        this.log(`Charging FTL drives...`, '#fff');
+
+        // Chance = Base 30% + Evasion Score
+        const escapeChance = 30 + (this.playerStats.evasion);
+        const roll = Math.random() * 100;
+
+        setTimeout(() => {
+            if (roll < escapeChance) {
+                this.log(`Jump successful! Escaping combat zone.`, '#66ff99');
+                setTimeout(() => this.end(), 1000);
+            } else {
+                this.log(`FTL Drive Locked! Escape failed.`, '#ff6666');
+                setTimeout(() => this.performEnemyTurn(), 600);
+            }
+        }, 800);
+    }
+
+    performEnemyTurn() {
+        if (this.opponentStats.hull <= 0) return;
+
+        // Calc Hit Chance
+        const hitChance = this.opponentStats.accuracy - this.playerStats.evasion;
+        const roll = Math.random() * 100;
+
+        if (roll < hitChance) {
+            // HIT
+            let dmg = Math.floor(this.opponentStats.damage * (0.8 + Math.random() * 0.4));
+            
+            // Shield Mitigation
+            let shieldAbsorb = 0;
+            if (this.playerStats.shields > 0) {
+                // Shields absorb up to 50% of damage, but degrade
+                const absorbAmt = Math.min(this.playerStats.shields, Math.ceil(dmg * 0.5));
+                shieldAbsorb = absorbAmt;
+                this.playerStats.shields -= Math.ceil(absorbAmt * 0.5); // Shields take damage too
+                dmg -= absorbAmt;
+            }
+
+            this.playerStats.hull -= dmg;
+            
+            // Sync to Global State immediately so UI updates
+            this.gameState.ship.hull = this.playerStats.hull;
+            this.gameState.ship.shields = this.playerStats.shields;
+
+            let msg = `Enemy fires! Hull took <strong>${dmg}</strong> damage.`;
+            if(shieldAbsorb > 0) msg += ` (Shields absorbed ${shieldAbsorb})`;
+            
+            this.log(msg, '#ff6666');
+            this.updateStatsUI();
+
+            if (this.checkLossCondition()) return;
+
+        } else {
+            // MISS
+            this.log(`Enemy weapons fire missed!`, '#888');
         }
-        
-        return encounterResult;
+
+        // Unlock turn for player
+        this.turnLocked = false;
+    }
+
+    checkWinCondition() {
+        if (this.opponentStats.hull <= 0) {
+            this.updateStatsUI();
+            this.log(`Target destroyed. Hostiles neutralized.`, '#66ff99');
+            
+            // Hook for subclasses (Pirate loot, etc)
+            if (this.options.onWin) this.options.onWin();
+            else setTimeout(() => this.end({ result: 'win' }), 1500);
+            
+            return true;
+        }
+        return false;
+    }
+
+    checkLossCondition() {
+        if (this.playerStats.hull <= 0) {
+            this.updateStatsUI();
+            this.log(`CRITICAL FAILURE. SHIP DESTROYED.`, '#ff0000');
+            
+            // Trigger global game over
+            setTimeout(() => {
+                this.end({ result: 'loss' });
+                document.getElementById('game-over-screen').style.display = 'flex';
+            }, 1500);
+            return true;
+        }
+        return false;
     }
 }

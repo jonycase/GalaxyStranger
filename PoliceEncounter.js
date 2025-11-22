@@ -1,302 +1,229 @@
+/* --- START OF FILE PoliceEncounter.js --- */
+
 import { Encounter } from './Encounter.js';
 import { CombatEncounter } from './CombatEncounter.js';
 
 export class PoliceEncounter extends Encounter {
     constructor(player, gameState, options = {}) {
+        // 1. Init as Text Encounter
         super(player, gameState, {
             ...options,
             type: 'police',
-            title: 'POLICE INSPECTION',
+            title: 'SECURITY INTERDICTION',
             iconClass: 'fa-shield-alt'
         });
         
-        // Store encounter manager reference
+        // Critical: Store manager ref to swap state if combat starts
         this.encounterManager = options.encounterManager;
         
-        this.illegalGoods = gameState.cargo.filter(item => {
-            const good = gameState.goods.find(g => g.id === item.id);
-            return good && good.illegal;
-        });
-        this.hasIllegalGoods = this.illegalGoods.length > 0;
+        // 2. Scan Logic
+        const securityLevel = this.gameState.currentSystem.security || 'medium';
         
-        // Calculate total value of illegal goods
-        this.totalIllegalValue = 0;
-        if (this.hasIllegalGoods) {
-            this.totalIllegalValue = this.illegalGoods.reduce((sum, item) => {
-                const good = gameState.goods.find(g => g.id === item.id);
-                return good ? sum + (good.basePrice * item.quantity) : sum;
-            }, 0);
-            
-            this.finePercentage = 0.25 + Math.random() * 0.25; // 25-50%
-            this.fineAmount = Math.min(
-                gameState.credits * this.finePercentage, 
-                5000 + this.totalIllegalValue
-            );
-        }
+        this.illegalItems = this.gameState.cargo.filter(item => item.illegal);
+        this.hasContraband = this.illegalItems.length > 0;
         
-        // Determine police tier based on system tech, security, and player bounty
-        this.policeTier = this.calculatePoliceTier();
+        // 3. Calculate Fine & Bribe based on Security
+        // Fines are higher in high-security systems
+        const fineMultiplier = securityLevel === 'high' ? 300 : (securityLevel === 'medium' ? 200 : 100);
         
-        // Calculate bribe cost (3x-5x illegal goods value)
-        this.bribeCost = Math.round(
-            this.totalIllegalValue * (3 + Math.random() * 2)
-        );
+        // Calculate total market value of illegal goods approx
+        this.fineAmount = this.illegalItems.reduce((sum, item) => sum + (item.quantity * fineMultiplier), 0);
         
-        // Calculate escape chance (base 10% + 5% per engine upgrade)
-        this.baseEscapeChance = 10;
-        this.escapeChance = this.baseEscapeChance + 
-            (this.player.evasion - 15); // 15 is base evasion
-    }
-    
-    calculatePoliceTier() {
-        const techLevels = ['none', 'low', 'medium', 'high'];
-        const securityLevels = ['none', 'low', 'medium', 'high'];
-        
-        // Map levels to values (0-3)
-        const techValue = techLevels.indexOf(this.gameState.currentSystem.techLevel);
-        const securityValue = securityLevels.indexOf(this.gameState.currentSystem.security);
-        
-        // Calculate base tier (1-10 scale)
-        let tier = Math.floor((techValue + securityValue) * 1.25) + 3;
-        
-        // Add bounty multiplier (1 tier per 2000 CR bounty)
-        const bountyTier = Math.min(5, Math.floor((this.gameState.bounty || 0) / 2000));
-        tier += bountyTier;
-        
-        // Add some random variation (-1 to +2)
-        tier += Math.floor(Math.random() * 3) - 1;
-        
-        // Clamp between 1 and 10
-        return Math.max(1, Math.min(10, tier));
+        // Bribes are cheaper than fines (incentive) but risky
+        // In 'none' (anarchy), bribes are basically "protection money" and very cheap
+        this.bribeAmount = Math.max(100, Math.floor(this.fineAmount * 0.4));
     }
 
     renderContent(contentEl) {
-        if (this.hasIllegalGoods) {
-            let bountyInfo = '';
-            if (this.gameState.bounty) {
-                bountyInfo = `<p>Your current bounty: ${this.gameState.bounty.toLocaleString()} CR</p>`;
-            }
-            
-            contentEl.innerHTML = `
-                <div id="illegal-goods-found" style="margin: 15px 0; color: #ff6666;">
-                    <p><i class="fas fa-exclamation-triangle"></i> Illegal goods detected!</p>
-                    <p>Total illegal goods value: ${Math.round(this.totalIllegalValue)} CR</p>
-                    <p id="fine-amount">Fine: ${Math.round(this.fineAmount)} CR</p>
-                    <p id="police-tier">Police Tier: ${this.policeTier} 
-                        (Higher tiers indicate better-equipped police)</p>
-                    <p>Escape chance: ${this.escapeChance}% 
-                        (increases with Quantum Engine upgrades)</p>
-                    <p>Bribe cost: ${this.bribeCost.toLocaleString()} CR 
-                        (3-5x illegal goods value)</p>
-                    ${bountyInfo}
+        if (!contentEl) return;
+
+        const secLevel = this.gameState.currentSystem.security.toUpperCase();
+        
+        let html = `
+            <div style="border-bottom:1px solid #333; padding-bottom:10px; margin-bottom:10px;">
+                <div style="font-size:10px; color:#888; letter-spacing:1px;">JURISDICTION: ${secLevel} SECURITY</div>
+                <div style="font-size:14px; color:#fff;">"Vessel identified. Commencing cargo manifest scan."</div>
+            </div>
+        `;
+
+        if (this.hasContraband) {
+            html += `
+                <div style="background:rgba(220, 50, 50, 0.15); border-left:3px solid #f66; padding:10px; text-align:left;">
+                    <div style="color:#f66; font-weight:bold; font-size:12px; margin-bottom:5px;">
+                        <i class="fas fa-siren-on"></i> VIOLATION DETECTED
+                    </div>
+                    <ul style="margin:0; padding-left:20px; font-size:12px; color:#ddd;">
+                        ${this.illegalItems.map(i => `<li>${i.name} (Qty: ${i.quantity})</li>`).join('')}
+                    </ul>
+                    <div style="margin-top:10px; font-size:12px; border-top:1px solid rgba(255,255,255,0.1); padding-top:5px;">
+                        <span style="color:#aaa;">Assessment:</span> <span style="color:#fff;">${this.fineAmount} CR</span>
+                    </div>
                 </div>
+                <p style="font-size:12px; color:#ccc; margin-top:15px; font-style:italic;">
+                    "Pay the fine and surrender the contraband immediately, or face lethal force."
+                </p>
             `;
         } else {
-            contentEl.innerHTML = `
-                <div id="no-illegal-goods" style="margin: 15px 0; color: #66ff99;">
-                    <p><i class="fas fa-check-circle"></i> No illegal goods found. You may proceed.</p>
+            html += `
+                <div style="background:rgba(50, 200, 100, 0.1); border-left:3px solid #6f9; padding:10px; text-align:left;">
+                    <div style="color:#6f9; font-weight:bold; font-size:12px;">
+                        <i class="fas fa-check"></i> SCAN CLEAR
+                    </div>
+                    <div style="font-size:12px; color:#ddd; margin-top:5px;">
+                        No protocols violated. 
+                    </div>
                 </div>
             `;
         }
+
+        contentEl.innerHTML = html;
     }
 
-    renderOptions() {
-        const optionsEl = document.getElementById('encounter-options');
+    renderOptions(optionsEl) {
         if (!optionsEl) return;
-        
-        optionsEl.innerHTML = '';
-        
-        // Add police action buttons
-        const actions = [];
 
-        if (this.hasIllegalGoods) {
-            actions.push(
-                { id: 'comply', icon: 'fa-check', label: 'COMPLY', className: '', 
-                  style: 'background: linear-gradient(to bottom, #3366cc, #2244aa);' }
-            );
-            
-            // Add bribe option if player can afford it
-            if (this.gameState.credits >= this.bribeCost) {
-                actions.push(
-                    { id: 'bribe', icon: 'fa-money-bill-wave', label: `BRIBE (${this.bribeCost.toLocaleString()} CR)`, 
-                      className: 'bribe', style: 'background: linear-gradient(to bottom, #33cc33, #22aa22);' }
-                );
-            }
-            
-            // Always show escape and attack options
-            actions.push(
-                { id: 'escape', icon: 'fa-running', label: 'ESCAPE', className: 'escape',
-                  style: 'background: linear-gradient(to bottom, #cccc00, #aaaa00);' },
-                { id: 'attack', icon: 'fa-fist-raised', label: 'ATTACK', className: 'attack' }
-            );
+        if (!this.hasContraband) {
+            optionsEl.innerHTML = `
+                <button class="combat-btn escape" data-action="close">
+                    <i class="fas fa-chevron-right"></i> PROCEED
+                </button>
+            `;
         } else {
-            actions.push(
-                { id: 'continue', icon: 'fa-chevron-right', label: 'CONTINUE', className: '', 
-                  style: 'background: linear-gradient(to bottom, #3366cc, #2244aa);' }
-            );
-        }
+            const canPay = this.gameState.credits >= this.fineAmount;
+            const canBribe = this.gameState.credits >= this.bribeAmount;
 
-        actions.forEach(action => {
-            const button = document.createElement('button');
-            button.className = `combat-btn ${action.className}`;
-            if (action.style) button.style.cssText = action.style;
-            button.innerHTML = `<i class="fas ${action.icon}"></i> ${action.label}`;
-            button.dataset.action = action.id;
-            optionsEl.appendChild(button);
-        });
+            optionsEl.innerHTML = `
+                <button class="combat-btn evade" data-action="pay" ${canPay ? '' : 'disabled'}>
+                    PAY FINE (-${this.fineAmount})
+                </button>
+                <button class="combat-btn" data-action="bribe" ${canBribe ? '' : 'disabled'}>
+                    BRIBE (-${this.bribeAmount})
+                </button>
+                <button class="combat-btn attack" data-action="fight">
+                    <i class="fas fa-crosshairs"></i> RESIST
+                </button>
+            `;
+        }
     }
 
     handleAction(action) {
-        switch (action) {
-            case 'comply':
-                this.handleComply();
+        switch(action) {
+            case 'close':
+                this.end();
+                break;
+            case 'pay':
+                this.resolveFine();
                 break;
             case 'bribe':
-                this.handleBribe();
+                this.resolveBribe();
                 break;
-            case 'escape':
-                this.handleEscape();
+            case 'fight':
+                this.startCombat();
                 break;
-            case 'attack':
-                this.handleAttack();
-                break;
-            case 'continue':
-                this.end();
-                this.closeEncounterModal();
+            default:
+                // Fallback for unhandled actions
+                this.log(`Command invalid: ${action}`, '#f66');
                 break;
         }
     }
 
-    handleComply() {
-        if (!this.hasIllegalGoods) {
-            this.log('You comply with the police inspection. Nothing is found, and you are free to go.');
-            setTimeout(() => this.end(), 2000);
+    resolveFine() {
+        // Transaction
+        this.gameState.credits -= this.fineAmount;
+        
+        // Confiscation logic
+        this.gameState.cargo = this.gameState.cargo.filter(i => !i.illegal);
+
+        this.log(`Fine paid. Illegal cargo confiscated.`, '#ffcc00');
+        
+        // Update UI Text
+        const contentEl = document.getElementById('encounter-content');
+        if(contentEl) contentEl.innerHTML = `<p style="color:#aaa; padding:20px;">"Scan logged. Transaction complete. You are free to navigate."</p>`;
+        
+        // Update Buttons
+        const optionsEl = document.getElementById('encounter-options');
+        if(optionsEl) optionsEl.innerHTML = `<button class="combat-btn escape" data-action="close">DEPART</button>`;
+
+        // Force Global UI Update
+        if(this.ui) this.ui.updateUI(); // Fallback if direct DOM manip fails
+        const credEl = document.getElementById('credits');
+        if(credEl) credEl.textContent = `${this.gameState.credits.toLocaleString()} CR`;
+    }
+
+    resolveBribe() {
+        this.gameState.credits -= this.bribeAmount;
+        
+        // Success Chance Calculation
+        const sec = this.gameState.currentSystem.security;
+        let chance = 0.5; // Medium
+        
+        if (sec === 'high') chance = 0.15; // Very hard to bribe high sec
+        else if (sec === 'low') chance = 0.70; // Easy
+        else if (sec === 'none') chance = 0.95; // Anarchy
+
+        const roll = Math.random();
+
+        if (roll < chance) {
+            // SUCCESS
+            this.log(`Bribe accepted.`, '#6f9');
+            
+            const contentEl = document.getElementById('encounter-content');
+            if(contentEl) contentEl.innerHTML = `<p style="color:#6f9; padding:20px;">"Sensor malfunction detected... data corrupted. Get out of here."</p>`;
+            
+            const optionsEl = document.getElementById('encounter-options');
+            if(optionsEl) optionsEl.innerHTML = `<button class="combat-btn escape" data-action="close">LEAVE QUICKLY</button>`;
+            
+            // Update Credits UI
+            const credEl = document.getElementById('credits');
+            if(credEl) credEl.textContent = `${this.gameState.credits.toLocaleString()} CR`;
+
+        } else {
+            // FAILURE
+            this.log(`Bribe REJECTED! Officer reports attempted corruption!`, '#f00');
+            setTimeout(() => this.startCombat(), 1000);
+        }
+    }
+
+    startCombat() {
+        this.log("Weapons Hot! Engaging System Authority!", '#f66');
+        
+        // 1. Generate Police Ship Stats
+        // Stronger than pirates, high accuracy
+        const policeShip = {
+            name: "Authority Patrol",
+            tier: 5,
+            hull: 120,
+            maxHull: 120,
+            damage: 12,
+            accuracy: 80, // Police don't miss often
+            icon: "fa-shield-alt"
+        };
+
+        // 2. Create Combat Instance
+        const combat = new CombatEncounter(this.player, policeShip, this.gameState, {
+            type: 'police-combat',
+            title: 'WANTED STATUS: ACTIVE',
+            iconClass: 'fa-siren-on',
+            onWin: () => {
+                this.log(`Authority vessel destroyed.`, '#6f9');
+                this.log(`Warning: Criminal record updated.`, '#f66');
+                setTimeout(() => combat.end({ result: 'win' }), 2000);
+            }
+        });
+
+        // 3. CRITICAL: Swap the Manager's current encounter reference
+        // This ensures the NEXT button click goes to 'combat', not 'police'
+        if (this.encounterManager) {
+            this.encounterManager.currentEncounter = combat;
+        } else {
+            console.error("PoliceEncounter missing manager reference! Combat transition failed.");
             return;
         }
 
-        if (this.gameState.credits >= this.fineAmount) {
-            this.gameState.credits -= Math.round(this.fineAmount);
-            this.gameState.cargo = this.gameState.cargo.filter(item => {
-                const good = this.gameState.goods.find(g => g.id === item.id);
-                return good && !good.illegal;
-            });
-            this.log(`You paid the fine of ${Math.round(this.fineAmount)} CR. Your illegal cargo has been confiscated.`);
-            setTimeout(() => {
-                this.end();
-                this.closeEncounterModal();
-            }, 2000);
-        } else {
-            this.log("You can't pay the fine! The police ships have opened fire!");
-            setTimeout(() => this.handleAttack(), 2000);
-        }
-    }
-    
-    handleBribe() {
-        // Deduct bribe cost immediately
-        this.gameState.credits -= this.bribeCost;
-        this.log(`You attempt to bribe the police with ${this.bribeCost.toLocaleString()} CR...`);
+        // 4. Initialize Combat UI (Takes over the modal)
+        combat.start();
         
-        // 50% chance of success
-        if (Math.random() < 0.5) {
-            this.log("The bribe worked! The police look the other way.");
-            setTimeout(() => {
-                this.end();
-                this.closeEncounterModal();
-            }, 2000);
-        } else {
-            this.log("The bribe failed! The police are attacking!");
-            setTimeout(() => this.handleAttack(), 2000);
-        }
-    }
-    
-    handleEscape() {
-        this.log(`Attempting to escape (${this.escapeChance}% chance)...`);
-        
-        if (Math.random() * 100 < this.escapeChance) {
-            this.log("Escape successful! You evade the police.");
-            setTimeout(() => {
-                this.end();
-                this.closeEncounterModal();
-            }, 2000);
-        } else {
-            this.log("Escape failed! The police are attacking!");
-            setTimeout(() => this.handleAttack(), 2000);
-        }
-    }
-    
-    handleAttack() {
-        this.log('You decide to fight the police! Get ready for combat.');
-        
-        // Calculate police ship stats based on tier
-        const baseHull = 70 + this.policeTier * 5;
-        const baseDamage = 8 + this.policeTier * 2;
-        const baseEvasion = 15 + this.policeTier * 1.5;
-        const baseShields = 15 + this.policeTier * 2;
-        const baseAccuracy = 60 + this.policeTier * 3;
-        
-        // Apply police equipment bonus (better than pirates)
-        const policeMultiplier = 1.25 + (0.08 * (this.policeTier - 1));
-        
-        const policeShip = {
-            name: `Police Patrol (T${this.policeTier})`,
-            hull: Math.round(baseHull * policeMultiplier),
-            damage: Math.round(baseDamage * policeMultiplier),
-            evasion: Math.round(baseEvasion * policeMultiplier),
-            shields: Math.round(baseShields * policeMultiplier),
-            accuracy: Math.round(baseAccuracy * policeMultiplier),
-            icon: 'fa-shield-alt'
-        };
-        
-        const policeCombat = new CombatEncounter(
-            this.player,
-            policeShip,
-            this.gameState,
-            {
-                type: 'police-combat',
-                title: 'POLICE COMBAT',
-                iconClass: 'fa-shield-alt',
-                onWin: (result) => {
-                    policeCombat.log("You defeated the police ship! But now you're a wanted criminal.");
-                    this.gameState.ship.hull = policeCombat.playerStats.hull;
-                    this.gameState.ship.shields = policeCombat.playerStats.shields;
-                    
-                    // Add bounty for attacking police (scales with tier)
-                    this.gameState.bounty = this.gameState.bounty || 0;
-                    const bountyIncrease = 1000 * this.policeTier;
-                    this.gameState.bounty += bountyIncrease;
-                    policeCombat.log(`+${bountyIncrease.toLocaleString()} CR bounty added! Total bounty: ${this.gameState.bounty.toLocaleString()} CR`);
-                    
-                    setTimeout(() => {
-                        policeCombat.end();
-                        policeCombat.closeEncounterModal();
-                    }, 3000);
-                },
-                onLose: (result) => {
-                    policeCombat.log("Your ship was destroyed by the police!");
-                    setTimeout(() => {
-                        policeCombat.end();
-                        policeCombat.closeEncounterModal();
-                    }, 3000);
-                }
-            }
-        );
-
-        // Replace current encounter with combat encounter
-        this.encounterManager.currentEncounter = policeCombat;
-        policeCombat.start();
-    }
-    
-    end(result = {}) {
-        const encounterResult = super.end(result);
-        this.updateMainUI();
-        return encounterResult;
-    }
-
-    closeEncounterModal() {
-        const modal = document.getElementById('encounter-modal');
-        if (modal) {
-            modal.style.opacity = '0';
-            modal.style.pointerEvents = 'none';
-        }
+        // 5. Preserve context in log
+        combat.log("Engaging hostilities with local law enforcement.", '#f66');
     }
 }

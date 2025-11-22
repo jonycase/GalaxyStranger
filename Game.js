@@ -2,63 +2,101 @@ import { GameState } from './GameState.js';
 import { EncounterManager } from './EncounterManager.js';
 import { UI } from './UI.js';
 
+console.log("Game.js loading...");
+
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("DOM Loaded. Initializing Game...");
+
+    // 1. Element References
+    const initScreen = document.getElementById('init-screen');
+    const gameContent = document.getElementById('game-content');
+    const startBtn = document.getElementById('start-game-btn');
+    const newGameBtn = document.getElementById('new-game-btn');
+    const sizeOptions = document.querySelectorAll('.size-option');
+    const shapeOptions = document.querySelectorAll('.shape-option');
+
+    // Check for critical elements
+    if (!initScreen || !startBtn) {
+        console.error("Critical DOM elements missing! Check index.html IDs.");
+        return;
+    }
+
+    // 2. Initialize Logic Classes
     const gameState = new GameState();
     const encounterManager = new EncounterManager(gameState);
+    // Pass dependencies to UI
     const ui = new UI(gameState, encounterManager);
     
-    // Initialize the game
-    window.addEventListener('load', () => {
-        // Galaxy size selection
-        const sizeOptions = document.querySelectorAll('.size-option');
-        if (sizeOptions) {
-            sizeOptions.forEach(option => {
-                option.addEventListener('click', () => {
-                    // Highlight selection
-                    document.querySelectorAll('.size-option').forEach(o => o.classList.remove('selected'));
-                    option.classList.add('selected');
-                    
-                    // Get selected shape
-                    const shape = document.querySelector('.shape-option.selected')?.dataset.shape || 'balanced';
+    // Circular dependency resolution: EncounterManager needs UI to show modals
+    encounterManager.setUI(ui);
 
-                    // Start game after brief pause
-                    setTimeout(() => {
-                        const size = parseInt(option.dataset.size);
-                        const initScreen = document.getElementById('init-screen');
-                        const gameContent = document.getElementById('game-content');
-                        
-                        if (initScreen) initScreen.style.display = 'none';
-                        if (gameContent) gameContent.style.display = 'flex';
-                        
-                        // Store shape in gameState and initialize game
-                        gameState.galaxyShape = shape; 
-                        gameState.initGame(size, () => {
-                            ui.setupCanvas();
-                            ui.updateUI(); 
-                            ui.showNotification(`Welcome to ${gameState.currentSystem.name}!`);
-                        });
-                    }, 300);
-                });
+    // 3. Setup Menu Interactions
+    
+    // A. Galaxy Size Selection
+    if (sizeOptions) {
+        sizeOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                // Remove active class from all
+                sizeOptions.forEach(o => o.classList.remove('selected'));
+                // Add to clicked
+                option.classList.add('selected');
             });
-        }
+        });
+    }
+
+    // B. Galaxy Shape Selection
+    if (shapeOptions) {
+        shapeOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                shapeOptions.forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+            });
+        });
+    }
+
+    // C. Start Game Button
+    startBtn.addEventListener('click', () => {
+        console.log("Start Button Clicked");
         
-        // Shape selection logic
-        const shapeOptions = document.querySelectorAll('.shape-option');
-        if (shapeOptions) {
-            shapeOptions.forEach(option => {
-                option.addEventListener('click', () => {
-                    document.querySelectorAll('.shape-option').forEach(o => o.classList.remove('selected'));
-                    option.classList.add('selected');
-                });
-            });
-        }
+        const selectedSizeOpt = document.querySelector('.size-option.selected');
+        const selectedShapeOpt = document.querySelector('.shape-option.selected');
 
-        // Game Over Restart logic
-        const newGameBtn = document.getElementById('new-game-btn');
-        if (newGameBtn) {
-            newGameBtn.addEventListener('click', () => {
-                window.location.reload();
+        // Default values if selection fails
+        const size = selectedSizeOpt ? parseInt(selectedSizeOpt.dataset.size) : 1000;
+        const shape = selectedShapeOpt ? selectedShapeOpt.dataset.shape : 'balanced';
+        
+        console.log(`Initializing Galaxy: Size=${size}, Shape=${shape}`);
+
+        // Set Config
+        gameState.galaxyShape = shape;
+
+        // UI Transition: Fade out init screen
+        initScreen.style.opacity = '0';
+        initScreen.style.pointerEvents = 'none'; // Prevent double clicks
+
+        setTimeout(() => {
+            initScreen.style.display = 'none';
+            gameContent.style.display = 'flex'; // Show Game UI
+            
+            // Start Generation
+            gameState.initGame(size, () => {
+                console.log("Generation Complete. Starting UI...");
+                
+                // Setup Canvas & Listeners
+                ui.setupCanvas();
+                
+                // Render initial state
+                ui.updateUI();
+                
+                ui.showNotification("Systems Online. Welcome Commander.");
             });
-        }
+        }, 500); // Wait for fade out
     });
+
+    // D. Restart Button (Game Over Screen)
+    if (newGameBtn) {
+        newGameBtn.addEventListener('click', () => {
+            window.location.reload();
+        });
+    }
 });
