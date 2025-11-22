@@ -973,7 +973,16 @@ body, html {
         font-size: 12px !important;
         padding: 0 16px !important;
         margin-bottom: 5px;
+        touch-action: manipulation;
+        transition: transform 0.2s, background 0.2s;
     }
+    
+    .btn-buy, .btn-sell, .upgrade-action button:active, .contract-button {
+        transform: scale(0.92) !important;
+        filter: brightness(1.2);
+        transition: transform 0.05s;
+    }
+    
     
     /* Larger gaps in lists to prevent fat-finger errors */
     .market-grid, .cargo-item, .upgrade-item {
