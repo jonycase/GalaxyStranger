@@ -58,6 +58,7 @@ export class UI {
             }
         }, true);
         
+        this.setupMobileFastClick();
         // Initialize generic App listeners (Tabs, etc.)
         this.setupAppEventListeners();
     }
@@ -753,6 +754,33 @@ export class UI {
             notification.style.transform = 'translateX(-50%) translateY(-20px)';
         }, 3000);
     }
+    
+    setupMobileFastClick() {
+        // Global Touch Start: Instantly add visual feedback
+        document.addEventListener('touchstart', (e) => {
+            // Find closest interactive element
+            const target = e.target.closest('button, .btn, .tab, .combat-btn, .map-center-btn, .system-overview-item, .size-option, .btn-close');
+            
+            if (target && !target.disabled) {
+                target.classList.add('is-active');
+            }
+        }, { passive: true });
+
+        // Global Touch End/Cancel: Remove feedback after short delay
+        const clearActiveState = () => {
+            const activeElements = document.querySelectorAll('.is-active');
+            activeElements.forEach(el => {
+                // Small timeout ensures the "flash" is visible even on super-fast taps
+                setTimeout(() => el.classList.remove('is-active'), 150);
+            });
+        };
+
+        document.addEventListener('touchend', clearActiveState, { passive: true });
+        document.addEventListener('touchcancel', clearActiveState, { passive: true });
+        
+        // Safety cleanup for drag-scrolls that might leave buttons stuck
+        document.addEventListener('scroll', clearActiveState, { passive: true });
+    }
 
     setupAppEventListeners() {
         // 1. Travel Button
@@ -816,7 +844,6 @@ export class UI {
             });
         });
     }
-    
     /**
      * Visual sequence for traveling.
      * Animates ship movement and handles arrival logic.
