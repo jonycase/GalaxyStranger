@@ -275,6 +275,8 @@ body, html {
 .map-center-btn:active{
     transform: scale(0.92) !important; /* Visual shrink effect */
     filter: brightness(1.2); /* Slight flash */
+        /* Critical: Removes 300ms delay on mobile taps */
+    touch-action: manipulation; 
 }
 
 .map-center-btn:hover { 
@@ -613,12 +615,16 @@ body, html {
     margin-bottom: 10px;
     padding-bottom: 10px;
     border-bottom: 1px solid var(--border-dim);
+        /* Critical: Removes 300ms delay on mobile taps */
+    touch-action: manipulation; 
 }
 
 .market-controls button {
     margin-right: 5px;
     padding: 4px 12px;
     min-width: 40px;
+        /* Critical: Removes 300ms delay on mobile taps */
+    touch-action: manipulation; 
 }
 
 /* Small helper for buttons */
@@ -761,6 +767,11 @@ body, html {
 
 .combat-btn:active {
     transform: translateY(0);
+        /* Critical: Removes 300ms delay on mobile taps */
+    touch-action: manipulation; 
+      /* Smooth animation for the press effect */
+    transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1), 
+                filter 0.1s ease;
 }
 
 .combat-btn:disabled {
@@ -867,6 +878,15 @@ body, html {
     transition: all 0.3s;
     box-shadow: 0 0 20px rgba(102, 204, 255, 0.4);
 }
+
+.btn-action:active {
+      /* Smooth animation for the press effect */
+          /* Critical: Removes 300ms delay on mobile taps */
+    touch-action: manipulation; 
+    transition: transform 0.08s cubic-bezier(0.4, 0, 0.2, 1), 
+        filter 0.1s ease;
+}
+
 .btn-action:hover {
     background: #fff;
     box-shadow: 0 0 40px rgba(102, 204, 255, 0.6);
