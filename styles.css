@@ -973,12 +973,12 @@ body, html {
         font-size: 12px !important;
         padding: 0 16px !important;
         margin-bottom: 5px;
+        transition: all 0.2s;
         touch-action: manipulation;
-        transition: transform 0.2s, background 0.2s;
     }
-    
+
     .btn-buy, .btn-sell, .upgrade-action button:active, .contract-button {
-        transform: scale(0.92) !important;
+        transform: scale(0.95); !important;
         filter: brightness(1.2);
         transition: transform 0.05s;
     }
