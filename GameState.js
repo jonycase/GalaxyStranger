@@ -62,7 +62,7 @@ export class GameState {
         this.contracts = [];
         this.upgrades = [
             { id: 'hull', name: 'Reinforced Hull', description: 'Increases hull strength', cost: 5000, effect: 10, icon: 'fas fa-shield-alt' },
-            { id: 'weapons', name: 'Plasma Cannons', description: 'Increases weapon damage', cost: 3500, effect: 5, icon: 'fas fa-gem' },
+            { id: 'weapons', name: 'Plasma Cannons', description: 'Increases weapon damage', cost: 3500, effect: 5, icon: 'fas fa-gun' },
             { id: 'engine', name: 'Quantum Engine', description: 'Increases evasion chance', cost: 2500, effect: 5, icon: 'fas fa-tachometer-alt' },
             { id: 'shields', name: 'Deflector Shields', description: 'Increases shield strength', cost: 3500, effect: 10, icon: 'fas fa-atom' },
             { id: 'cargo', name: 'Expanded Cargo', description: 'Increases cargo capacity', cost: 2500, effect: 10, icon: 'fas fa-boxes' },

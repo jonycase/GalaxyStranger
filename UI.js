@@ -771,7 +771,7 @@ export class UI {
             const activeElements = document.querySelectorAll('.is-active');
             activeElements.forEach(el => {
                 // Small timeout ensures the "flash" is visible even on super-fast taps
-                setTimeout(() => el.classList.remove('is-active'), 150);
+                setTimeout(() => el.classList.remove('is-active'), 75);
             });
         };
 
