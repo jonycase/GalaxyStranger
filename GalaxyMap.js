@@ -302,7 +302,7 @@ export class GalaxyMap {
                                         // Glow radius is 3x the core radius
                                         this.ctx.arc(pos.x, pos.y, radius * 3, 0, Math.PI * 2);
                                         this.ctx.fill();
-                                        this.ctx.globalAlpha = 1.0; // Reset opacity
+                                        this.ctx.globalAlpha = 6.0; // Reset opacity
                                     }
 
                                     // 3. Draw Core Star

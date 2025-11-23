@@ -52,27 +52,18 @@
     padding: 0;
     box-sizing: border-box;
     outline: none;
-    
-    /* CRITICAL FOR GAMES: Prevents text selection/highlighting on rapid taps */
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-    
-    /* Prevents long-press context menu on iOS */
     -webkit-touch-callout: none; 
 }
 
-/* CRITICAL: Remove 300ms delay on all interactive elements */
-button, 
-a, 
-[role="button"], 
-.tab, 
-.map-center-btn,
-.combat-btn,
-.btn,
-.market-controls button,
-.size-option {
+/* CRITICAL: Remove 300ms delay and highlight on interactive elements */
+button, a, [role="button"], 
+.tab, .map-center-btn, .combat-btn, .btn, 
+.market-controls button, .size-option, .upgrade-item, 
+.contract-item, .system-overview-item {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
 }
@@ -80,7 +71,7 @@ a,
 body, html {
     width: 100%;
     height: 100%;
-    overflow: hidden; /* Prevent scroll on the main game window */
+    overflow: hidden;
     background-color: var(--bg-void);
     color: #e0e0e0;
     font-family: var(--font-main);
@@ -88,35 +79,38 @@ body, html {
     line-height: 1.5;
 }
 
-/* Custom Scrollbar Styling */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-::-webkit-scrollbar-track {
-    background: var(--bg-deep);
-}
-::-webkit-scrollbar-thumb {
-    background: #333;
-    border-radius: 4px;
-    border: 1px solid var(--bg-deep);
-}
-::-webkit-scrollbar-thumb:hover {
-    background: var(--accent-secondary);
-}
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; border: 1px solid var(--bg-deep); }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-secondary); }
+#nearby-systems::-webkit-scrollbar { width: 4px; }
 
 /* Text Selection */
 ::selection {
     background: var(--accent-primary);
     color: var(--bg-void);
-    -moz-user-select: none;
-    -khtml-user-select: none;
-    -webkit-user-select: none;
-    user-select: none;
 }
 
+/* Helper Classes */
+.text-success { color: var(--accent-success) !important; }
+.text-danger { color: var(--accent-danger) !important; }
+.text-warning { color: var(--accent-warning) !important; }
+.text-info { color: var(--accent-primary) !important; }
+.text-muted { color: var(--accent-secondary) !important; }
+.blink { animation: blinkAnim 1s infinite; }
+.cursor-blink {
+    display: inline-block;
+    width: 6px; height: 12px;
+    background: var(--accent-success);
+    animation: blinkCursor 1s infinite steps(2);
+    vertical-align: middle;
+    margin-left: 2px;
+}
+.unselectable { user-select: none; }
+
 /* ==========================================================================
-   3. MAIN LAYOUT STRUCTURE
+   3. LAYOUT & CONTAINERS
    ========================================================================== */
 .app-container {
     display: flex;
@@ -131,18 +125,12 @@ body, html {
     width: 100%;
     height: 100%;
     flex-direction: row;
-    opacity: 0; /* Hidden initially, faded in via JS */
+    opacity: 0;
     transition: opacity 1s ease-in;
     animation: interfaceFadeIn 1.5s forwards;
 }
 
-@keyframes interfaceFadeIn {
-    to { opacity: 1; }
-}
-
-/* ==========================================================================
-   4. LEFT PANEL: GALAXY MAP & CANVAS
-   ========================================================================== */
+/* Left Panel: Map Container */
 .map-container {
     flex: 1;
     position: relative;
@@ -150,15 +138,9 @@ body, html {
     overflow: hidden;
     cursor: grab;
     box-shadow: inset 0 0 50px rgba(0,0,0,0.8);
-    /* Critical for mobile game controls: disables native scrolling/zooming */
     touch-action: none; 
-    -webkit-user-select: none;
-    user-select: none;
 }
-
-.map-container:active {
-    cursor: grabbing;
-}
+.map-container:active { cursor: grabbing; }
 
 #galaxy-canvas {
     display: block;
@@ -166,25 +148,16 @@ body, html {
     height: 100%;
 }
 
-/* CRT Scanline Effect Overlay */
+/* Effects */
 .crt-overlay {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: linear-gradient(
-        rgba(18, 16, 16, 0) 50%, 
-        rgba(0, 0, 0, 0.1) 50%
-    ), linear-gradient(
-        90deg, 
-        rgba(255, 0, 0, 0.03), 
-        rgba(0, 255, 0, 0.01), 
-        rgba(0, 0, 255, 0.03)
-    );
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
     background-size: 100% 2px, 3px 100%;
     pointer-events: none;
     z-index: var(--z-hud);
 }
-
-/* Vignette Effect */
 .map-container::after {
     content: "";
     position: absolute;
@@ -194,151 +167,7 @@ body, html {
     z-index: var(--z-hud);
 }
 
-/* ==========================================================================
-   5. MAP HUD ELEMENTS
-   ========================================================================== */
-
-/* Ship Icon on Map */
-.ship-indicator {
-    position: absolute;
-    color: var(--accent-success);
-    font-size: 24px;
-    width: 24px;
-    height: 24px;
-    margin-left: -12px; 
-    margin-top: -12px;
-    z-index: 25;
-    filter: drop-shadow(0 0 8px var(--accent-success));
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    will-change: transform;
-    user-select: none;
-}
-
-/* Target Arrow Pointer */
-.target-pointer {
-    position: absolute;
-    pointer-events: none;
-    z-index: 30;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 40px; 
-    height: 40px;
-    transition: top 0.1s, left 0.1s;
-    user-select: none;
-}
-
-.pointer-arrow {
-    font-size: 24px;
-    color: var(--accent-primary);
-    filter: drop-shadow(0 0 5px var(--accent-primary));
-    animation: pointerBounce 1.5s infinite ease-in-out;
-    user-select: none;
-}
-
-@keyframes pointerBounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
-}
-
-.pointer-info {
-    position: absolute;
-    top: 100%;
-    background: rgba(0, 0, 0, 0.85);
-    padding: 4px 8px;
-    border-radius: 4px;
-    border: 1px solid var(--accent-primary);
-    margin-top: 5px;
-    white-space: nowrap;
-    backdrop-filter: blur(2px);
-    user-select: none;
-}
-
-#pointer-name { display: block; font-size: 11px; font-weight: bold; color: #fff; user-select: none; }
-#pointer-dist { display: block; font-size: 10px; color: var(--accent-primary); text-align: center; }
-
-/* Hover Tooltip */
-#hover-pointer {
-    position: absolute;
-    z-index: 40;
-    pointer-events: none;
-}
-
-.hover-details {
-    background: rgba(11, 12, 21, 0.95);
-    border: 1px solid var(--border-light);
-    border-left: 3px solid var(--accent-primary);
-    padding: 10px 15px;
-    border-radius: 0 6px 6px 0;
-    font-size: 12px;
-    white-space: nowrap;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
-}
-
-/* Map Center Button */
-.map-center-btn {
-    position: absolute;
-    bottom: 30px; 
-    right: 30px;
-    width: 44px; 
-    height: 44px;
-    background: rgba(30, 32, 50, 0.9);
-    border: 1px solid var(--border-light);
-    border-radius: 50%;
-    color: var(--accent-primary);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    z-index: 45;
-    transition: all 0.2s;
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
-    /* Mobile optimizations */
-    min-width: var(--mobile-tap-target);
-    min-height: var(--mobile-tap-target);
-}
-
-.map-center-btn:active{
-    transform: scale(0.92) !important;
-    filter: brightness(1.2);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1), 
-                filter var(--mobile-tap-fast) ease;
-}
-
-.map-center-btn:hover { 
-    background: var(--accent-primary); 
-    color: #000;
-    box-shadow: 0 0 20px var(--accent-primary);
-}
-
-/* Notifications */
-.notification {
-    position: absolute;
-    top: 80px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-20px);
-    background: rgba(10, 15, 30, 0.95);
-    border: 1px solid var(--accent-primary);
-    border-radius: 4px;
-    padding: 12px 30px;
-    color: #fff;
-    font-weight: 600;
-    font-size: 14px;
-    letter-spacing: 1px;
-    opacity: 0;
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    z-index: var(--z-overlay-top);
-    pointer-events: none;
-    box-shadow: 0 0 30px rgba(102, 204, 255, 0.3);
-    text-transform: uppercase;
-}
-
-/* ==========================================================================
-   6. RIGHT PANEL: UI CONTROLS
-   ========================================================================== */
+/* Right Panel: UI Controls */
 .ui-panel {
     width: var(--panel-width);
     min-width: 320px;
@@ -349,8 +178,6 @@ body, html {
     box-shadow: -10px 0 30px rgba(0,0,0,0.6);
     border-left: 1px solid var(--border-dim);
 }
-
-/* Traveling State (Disabled UI) */
 .ui-panel.traveling {
     pointer-events: none;
     opacity: 0.8;
@@ -368,1070 +195,142 @@ body, html {
     animation: pulseText 1s infinite;
 }
 
-/* --- TABS --- */
-.tabs {
+/* ==========================================================================
+   4. HUD & MAP ELEMENTS
+   ========================================================================== */
+/* Ship Icon */
+.ship-indicator {
+    position: absolute;
+    color: var(--accent-success);
+    font-size: 24px;
+    width: 24px; height: 24px;
+    margin-left: -12px; margin-top: -12px;
+    z-index: 25;
+    filter: drop-shadow(0 0 8px var(--accent-success));
     display: flex;
-    background: #080910;
-    border-bottom: 1px solid var(--border-dim);
-    overflow-x: auto;
+    justify-content: center;
+    align-items: center;
+    will-change: transform;
 }
 
-.tab {
-    flex: 1;
-    padding: 15px 10px;
-    text-align: center;
-    font-size: 10px;
-    color: var(--accent-secondary);
-    cursor: pointer;
-    transition: all 0.2s;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    border-bottom: 2px solid transparent;
-    border-right: 1px solid rgba(255,255,255,0.02);
+/* Target Pointers */
+.target-pointer {
+    position: absolute;
+    pointer-events: none;
+    z-index: 30;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 5px;
-    /* Mobile optimizations */
-    min-height: var(--mobile-tap-target);
-    min-width: 60px;
+    justify-content: center;
+    width: 40px; height: 40px;
+    transition: top 0.1s, left 0.1s;
 }
-.tab i { font-size: 16px; margin-bottom: 2px; }
-.tab:hover { background: rgba(255,255,255,0.05); color: #fff; }
-.tab.active {
+.pointer-arrow {
+    font-size: 24px;
     color: var(--accent-primary);
-    border-bottom: 2px solid var(--accent-primary);
-    background: rgba(102, 204, 255, 0.05);
+    filter: drop-shadow(0 0 5px var(--accent-primary));
+    animation: pointerBounce 1.5s infinite ease-in-out;
 }
-
-.tab:active {
-    transform: scale(0.95);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* --- TAB CONTENT --- */
-.tab-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    position: relative;
-}
-
-.panel-section h2 {
-    margin: 0 0 20px 0;
-    font-size: 14px;
-    color: var(--accent-primary);
-    border-bottom: 1px solid var(--border-light);
-    padding-bottom: 10px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-/* --- STATS GRID --- */
-/* --- STATUS TAB DASHBOARD --- */
-.stats-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 20px;
-}
-
-.stat {
-    background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
-    border: 1px solid var(--border-dim);
-    border-left: 2px solid var(--border-light);
-    padding: 12px 15px;
+.pointer-info {
+    position: absolute;
+    top: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 4px 8px;
     border-radius: 4px;
-    position: relative;
-    overflow: hidden;
-    transition: all 0.2s;
-}
-
-.stat:hover {
-    background: rgba(255,255,255,0.05);
-    border-color: var(--border-light);
-    border-left-color: var(--accent-primary);
-    transform: translateX(2px);
-}
-
-.stat span:first-child { 
-    display: block; 
-    font-size: 10px; 
-    text-transform: uppercase; 
-    letter-spacing: 1px;
-    color: var(--accent-secondary); 
-    margin-bottom: 5px; 
-}
-
-.stat-value { 
-    font-size: 16px; 
-    font-weight: 700; 
-    color: #fff; 
-    letter-spacing: 0.5px; 
-    font-family: var(--font-mono);
-}
-
-/* Specific Stat Highlights via ID or Context */
-#hull { color: var(--accent-danger); text-shadow: 0 0 10px rgba(255, 102, 102, 0.3); }
-#credits { color: var(--accent-success); }
-#fuel { color: var(--accent-warning); }
-
-/* --- NAVIGATION COMPUTER PANEL --- */
-.nav-computer {
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid var(--border-dim);
-    border-top: 2px solid var(--accent-primary);
-    border-radius: 0 0 6px 6px;
-    padding: 15px;
+    border: 1px solid var(--accent-primary);
     margin-top: 5px;
-    position: relative;
+    white-space: nowrap;
+    backdrop-filter: blur(2px);
 }
+#pointer-name { display: block; font-size: 11px; font-weight: bold; color: #fff; }
+#pointer-dist { display: block; font-size: 10px; color: var(--accent-primary); text-align: center; }
 
-.nav-computer::before {
-    content: "NAV-COM ONLINE";
+/* Hover Tooltip */
+#hover-pointer {
     position: absolute;
-    top: -10px; right: 10px;
-    font-size: 14px;
-    background: var(--bg-panel);
-    padding: 0 5px;
-    color: var(--accent-primary);
-    border: 1px solid var(--border-dim);
-}
-
-.nav-computer .stat {
-    background: transparent;
-    border: none;
-    border-bottom: 1px dashed rgba(255,255,255,0.1);
-    padding: 8px 0;
-    margin: 0;
-    border-radius: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.nav-computer .stat:hover { transform: none; background: transparent; }
-.nav-computer .stat:last-of-type { border-bottom: none; }
-.nav-computer .stat-value { font-size: 13px; }
-
-/* Mobile Control Group in Status Tab */
-.mobile-controls {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 10px;
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 1px solid var(--border-dim);
-}
-
-/* --- SYSTEM OVERVIEW TAB --- */
-
-/* Main Grid Layout */
-.system-overview-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-/* Individual Data Cards */
-.system-overview-item {
-    background: rgba(19, 20, 31, 0.6);
-    border: 1px solid var(--border-dim);
-    padding: 15px;
-    border-radius: 6px;
-    position: relative;
-}
-
-.system-overview-item h3 {
-    margin: 0 0 12px 0;
-    font-size: 11px;
-    text-transform: uppercase;
-    color: var(--accent-secondary);
-    letter-spacing: 1px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    padding-bottom: 5px;
-}
-
-/* Primary System Header (Top Card) */
-.system-overview-item:first-child {
-    background: linear-gradient(90deg, rgba(102, 204, 255, 0.05) 0%, transparent 100%);
-    border-left: 3px solid var(--accent-primary);
-}
-
-#current-system-name {
-    font-size: 18px; 
-    color: #fff; 
-    font-weight: bold; 
-    letter-spacing: 1px;
-    margin-bottom: 5px;
-    text-shadow: 0 0 10px rgba(102, 204, 255, 0.2);
-}
-
-/* Data Rows inside Cards */
-.system-overview-item div[id^="overview-"], 
-.system-overview-item div[id^="current-"] {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    padding: 4px 0;
-    color: #ccc;
-}
-
-/* Add labels via CSS to keep HTML clean? Or assume HTML has structure.
-   Assuming HTML is simple text like "Economy: Mining", lets style the value if we can,
-   but simplified: just consistent row spacing.
-*/
-
-/* Threat Level Styling */
-#overview-threat {
-    font-weight: bold;
-    color: var(--accent-danger);
-}
-
-/* Nearby Systems List */
-#nearby-systems {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 10px;
-    max-height: 150px;
-    overflow-y: auto;
-    padding-right: 5px;
-}
-
-/* Nearby System Item */
-#nearby-systems .system-overview-item {
-    padding: 10px;
-    background: rgba(255,255,255,0.02);
-    border: 1px solid transparent;
-    cursor: pointer;
-    transition: all 0.2s;
-    /* Mobile optimizations */
-    min-height: var(--mobile-tap-target);
-    display: flex;
-    align-items: center;
-}
-
-#nearby-systems .system-overview-item:active {
-    transform: scale(0.98);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-#nearby-systems .system-overview-item:hover {
-    background: rgba(255,255,255,0.05);
-    border-color: var(--border-light);
-    transform: translateX(4px);
-}
-
-/* Custom Scrollbar for the list */
-#nearby-systems::-webkit-scrollbar { width: 4px; }
-#nearby-systems::-webkit-scrollbar-thumb { background: #333; }
-
-/* --- MARKET GRID --- */
-.market-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr 1fr 0.8fr 1.2fr;
-    gap: 10px;
-    align-items: center;
-}
-.market-header {
-    font-size: 10px;
-    font-weight: bold;
-    color: var(--accent-secondary);
-    text-transform: uppercase;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-dim);
-}
-.market-item {
-    display: contents;
-}
-.market-item > div {
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
-    font-size: 12px;
-}
-/* Market Controls */
-.market-controls {
-    display: flex;
-    align-items: center;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border-dim);
-}
-
-.market-controls button {
-    margin-right: 5px;
-    padding: 4px 12px;
-    min-width: 40px;
-    /* Mobile optimizations */
-    min-height: var(--mobile-tap-target);
-    min-width: var(--mobile-tap-target);
-}
-
-/* Small helper for buttons */
-.btn.small {
-    padding: 4px 10px;
-    font-size: 11px;
-    /* Mobile optimizations */
-    min-height: calc(var(--mobile-tap-target) - 8px);
-    min-width: calc(var(--mobile-tap-target) - 8px);
-}
-
-/* ==========================================================================
-   7. THE ENCOUNTER MODAL (CRITICAL FIXES & STYLES)
-   ========================================================================== */
-
-/* 
-   The Overlay: 
-   Fixed positioning + Flex centering ensures the modal is always visible 
-   and centered, regardless of scrolling or screen size.
-*/
-.modal-overlay {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(5, 6, 8, 0.85);
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-    z-index: var(--z-modal-backdrop);
-    
-    /* Centering Magic */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    
-    opacity: 0; /* Handled by JS fade-in */
-    transition: opacity 0.3s ease-in-out;
-}
-
-/* 
-   The Container:
-   The actual window for the encounter content.
-*/
-.encounter-container {
-    background: #151621;
-    width: 90%;
-    max-width: 600px;
-    max-height: 90vh; /* Prevent running off screen vertically */
-    overflow-y: auto; /* Scroll internally if content is huge */
-    
-    border: 1px solid var(--border-light);
-    box-shadow: 0 0 50px rgba(0,0,0,0.8), 0 0 15px rgba(100,100,100,0.1);
-    border-radius: 12px;
-    padding: 0; /* Padding handled by internal sections */
-    position: relative;
-    
-    /* Entry Animation */
-    transform: scale(0.95);
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-/* If the modal is visible (controlled by JS adding classes or inline styles usually, but here relying on parent opacity transition) */
-.modal-overlay[style*="opacity: 1"] .encounter-container {
-    transform: scale(1);
-}
-
-/* --- Encounter Header --- */
-.encounter-header {
-    background: rgba(0,0,0,0.2);
-    padding: 20px;
-    border-bottom: 1px solid var(--border-dim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 15px;
-    border-radius: 12px 12px 0 0;
-}
-.encounter-header i { font-size: 28px; }
-.encounter-header h2 { 
-    margin: 0; 
-    font-size: 20px; 
-    text-transform: uppercase; 
-    letter-spacing: 3px; 
-    font-weight: 700;
-}
-
-/* --- Encounter Content Area --- */
-.encounter-body {
-    padding: 25px;
-    font-size: 15px;
-    line-height: 1.6;
-    color: #ccc;
-    min-height: 100px;
-}
-
-/* --- Combat Log Area --- */
-.combat-log {
-    background: #000;
-    border-top: 1px solid var(--border-dim);
-    border-bottom: 1px solid var(--border-dim);
-    height: 140px;
-    overflow-y: auto;
-    padding: 10px 20px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: #8899aa;
-    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
-}
-
-/* --- Action Buttons Area --- */
-.combat-options {
-    padding: 20px;
-    background: rgba(0,0,0,0.2);
-    border-radius: 0 0 12px 12px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 15px;
-}
-
-/* --- ENCOUNTER BUTTON STYLES --- */
-.combat-btn {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid var(--border-light);
-    color: #ddd;
-    padding: 15px 10px;
-    border-radius: 6px;
-    font-family: var(--font-main);
-    font-weight: 700;
-    font-size: 12px;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    position: relative;
-    overflow: hidden;
-    /* Mobile optimizations */
-    min-height: var(--mobile-tap-target);
-    min-width: 120px;
-}
-
-.combat-btn:hover {
-    background: rgba(255,255,255,0.1);
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-}
-
-.combat-btn:active {
-    transform: scale(0.95);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1), 
-                filter var(--mobile-tap-fast) ease;
-}
-
-.combat-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    transform: none;
-    filter: grayscale(1);
-}
-
-/* Button Variants */
-.combat-btn.attack { border-bottom: 3px solid var(--accent-danger); }
-.combat-btn.attack:hover { background: rgba(255, 102, 102, 0.1); color: #fff; box-shadow: 0 0 15px rgba(255, 102, 102, 0.2); }
-
-.combat-btn.evade { border-bottom: 3px solid var(--accent-primary); }
-.combat-btn.evade:hover { background: rgba(102, 204, 255, 0.1); color: #fff; box-shadow: 0 0 15px rgba(102, 204, 255, 0.2); }
-
-.combat-btn.escape { border-bottom: 3px solid var(--accent-warning); }
-.combat-btn.escape:hover { background: rgba(255, 204, 102, 0.1); color: #fff; box-shadow: 0 0 15px rgba(255, 204, 102, 0.2); }
-
-
-/* ==========================================================================
-   8. START SCREEN & INITIALIZATION
-   ========================================================================== */
-.init-screen {
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: radial-gradient(circle at center, #1a1b2e 0%, #000 100%);
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    transition: opacity 0.8s ease-out;
-}
-
-.game-title {
-    font-size: 4rem;
-    font-weight: 800;
-    line-height: 1;
-    color: #fff;
-    text-shadow: 0 0 20px var(--accent-primary), 0 0 40px var(--accent-primary);
-    text-align: center;
-    margin-bottom: 10px;
-    letter-spacing: 5px;
-    animation: glowPulse 3s infinite alternate;
-}
-
-.subtitle {
-    font-size: 1.2rem;
-    color: var(--accent-secondary);
-    letter-spacing: 8px;
-    text-transform: uppercase;
-    margin-bottom: 50px;
-}
-
-.setup-box {
-    background: rgba(255,255,255,0.03);
-    padding: 40px;
-    border-radius: 16px;
-    border: 1px solid var(--border-light);
-    width: 90%;
-    max-width: 500px;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-}
-
-.galaxy-size-selector {
-    display: flex;
-    gap: 15px;
-    margin-bottom: 25px;
-}
-
-.size-option {
-    flex: 1;
-    background: rgba(0,0,0,0.4);
-    border: 2px solid transparent;
-    padding: 20px 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.2s;
-    /* Mobile optimizations */
-    min-height: var(--mobile-tap-target);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-}
-.size-option:hover { background: rgba(255,255,255,0.05); }
-.size-option.selected {
-    border-color: var(--accent-primary);
-    background: rgba(102, 204, 255, 0.1);
-    box-shadow: 0 0 20px rgba(102, 204, 255, 0.2);
-}
-.size-option .icon { font-size: 24px; margin-bottom: 10px; color: var(--accent-secondary); }
-.size-option.selected .icon { color: var(--accent-primary); }
-
-.size-option:active {
-    transform: scale(0.95);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.btn-action {
-    width: 100%;
-    padding: 18px;
-    background: var(--accent-primary);
-    color: #000;
-    border: none;
-    border-radius: 6px;
-    font-weight: 800;
-    font-size: 16px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.3s;
-    box-shadow: 0 0 20px rgba(102, 204, 255, 0.4);
-    /* Mobile optimizations */
-    min-height: var(--mobile-tap-target);
-}
-
-.btn-action:active {
-    transform: scale(0.95);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1), 
-                filter var(--mobile-tap-fast) ease;
-}
-
-.btn-action:hover {
-    background: #fff;
-    box-shadow: 0 0 40px rgba(102, 204, 255, 0.6);
-    transform: scale(1.02);
-}
-
-/* ==========================================================================
-   9. ANIMATIONS
-   ========================================================================== */
-
-@keyframes pulse {
-    0% { opacity: 0.6; }
-    50% { opacity: 1; }
-    100% { opacity: 0.6; }
-}
-
-@keyframes glowPulse {
-    from { text-shadow: 0 0 20px var(--accent-primary); }
-    to { text-shadow: 0 0 40px var(--accent-primary), 0 0 80px var(--accent-primary); }
-}
-
-@keyframes pulseText {
-    0% { opacity: 0.5; }
-    50% { opacity: 1; }
-    100% { opacity: 0.5; }
-}
-
-/* ==========================================================================
-   10. LOADING SCREEN
-   ========================================================================== */
-.loading-screen {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: #000;
-    z-index: 2000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.progress-container {
-    width: 100%;
-    height: 4px;
-    background: #222;
-    border-radius: 2px;
-    overflow: hidden;
-    margin-top: 10px;
-}
-.progress-bar {
-    height: 100%;
-    background: var(--accent-primary);
-    width: 0%;
-    transition: width 0.1s linear;
-    box-shadow: 0 0 10px var(--accent-primary);
-}
-
-/* ==========================================================================
-   11. RESPONSIVE MEDIA QUERIES
-   ========================================================================== */
-
-/* Tablet & Smaller Desktop */
-@media (max-width: 1024px) {
-    :root { --panel-width: 300px; }
-}
-
-/* Mobile Devices */
-@media (max-width: 768px) {
-    .app-container { flex-direction: column; }
-    .game-interface { flex-direction: column; }
-    
-    .map-container { flex: 2; height: 50vh; order: 1; }
-    .ui-panel { 
-        width: 100%; 
-        height: 50vh; 
-        order: 2; 
-        border-left: none; 
-        border-top: 1px solid var(--border-light);
-    }
-    
-    .encounter-container {
-        width: 95%;
-        max-height: 85vh;
-    }
-    
-    .combat-options {
-        grid-template-columns: 1fr; /* Stack buttons on mobile */
-        gap: 12px;
-    }
-    
-    .combat-btn {
-        min-width: 100%;
-        padding: 18px 10px;
-    }
-    
-    .game-title { font-size: 2.5rem; }
-    .subtitle { font-size: 0.9rem; letter-spacing: 4px; }
-    
-    /* Mobile-specific market grid adjustments */
-    .market-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-    }
-    
-    .market-header:nth-child(4),
-    .market-header:nth-child(5),
-    .market-item > div:nth-child(4),
-    .market-item > div:nth-child(5) {
-        display: none;
-    }
-    
-    .market-controls {
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-    
-    .market-controls button {
-        flex: 1;
-        min-width: calc(50% - 4px);
-    }
-    
-    /* Mobile cargo adjustments */
-    .cargo-item {
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        padding: 12px 0;
-    }
-    
-    .cargo-item > div:nth-child(3) {
-        grid-column: 1 / -1;
-        display: flex;
-        justify-content: flex-end;
-        margin-top: 8px;
-    }
-    
-    /* Mobile ship upgrade adjustments */
-    .upgrade-item {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-    }
-    
-    .upgrade-action {
-        width: 100%;
-        text-align: center;
-    }
-    
-    .upgrade-action .btn {
-        width: 100%;
-    }
-}
-
-/* Ultrawide Fixes */
-@media (min-width: 2000px) {
-    :root { --panel-width: 500px; }
-    body { font-size: 16px; }
-}
-/* ==========================================================================
-   12. GAME OVER SCREEN
-   ========================================================================== */
-.game-over-screen {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.95);
-    z-index: 3000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    backdrop-filter: blur(10px);
-    animation: fadeIn 2s ease-out;
-}
-
-.game-over-box {
-    text-align: center;
-    padding: 60px 40px;
-    border: 2px solid var(--accent-danger);
-    border-radius: 12px;
-    background: linear-gradient(135deg, #1a0a0a 0%, #000 100%);
-    width: 90%;
-    max-width: 550px;
-    box-shadow: 0 0 100px rgba(255, 0, 0, 0.2);
-    position: relative;
-    overflow: hidden;
-}
-
-/* "Scanline" failure effect */
-.game-over-box::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: repeating-linear-gradient(
-        0deg,
-        rgba(255, 0, 0, 0.05),
-        rgba(255, 0, 0, 0.05) 1px,
-        transparent 1px,
-        transparent 3px
-    );
+    z-index: 40;
     pointer-events: none;
 }
-
-.game-over-box h1 {
-    color: var(--accent-danger);
-    font-size: 3rem;
-    margin-bottom: 10px;
-    text-transform: uppercase;
-    letter-spacing: 5px;
-    text-shadow: 0 0 20px var(--accent-danger);
-    animation: glitchText 3s infinite;
+.hover-details {
+    background: rgba(11, 12, 21, 0.95);
+    border: 1px solid var(--border-light);
+    border-left: 3px solid var(--accent-primary);
+    padding: 10px 15px;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+    white-space: nowrap;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
 }
 
-.game-over-box p {
-    color: #888;
-    font-size: 1.2rem;
-    margin-bottom: 40px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-}
-
-.game-over-stats {
-    display: grid;
-    gap: 15px;
-    text-align: left;
-    background: rgba(255, 0, 0, 0.05);
-    padding: 20px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 0, 0, 0.2);
-    margin-bottom: 30px;
-}
-
-.game-over-stats div {
-    display: flex;
-    justify-content: space-between;
-    font-size: 1.1rem;
-    border-bottom: 1px dashed rgba(255, 0, 0, 0.2);
-    padding-bottom: 5px;
-}
-
-.game-over-stats div:last-child {
-    border-bottom: none;
-}
-
-@keyframes glitchText {
-    0% { transform: translate(0); text-shadow: 2px 0 red, -2px 0 blue; }
-    2% { transform: translate(-2px, 2px); }
-    4% { transform: translate(2px, -2px); }
-    6% { transform: translate(0); }
-    100% { transform: translate(0); }
-}
-
-/* ==========================================================================
-   13. FULL GALAXY MAP MODAL
-   ========================================================================== */
-.galaxy-map-modal {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(5, 6, 8, 0.98);
-    z-index: 1500;
+/* Map Buttons */
+.map-center-btn {
+    position: absolute;
+    bottom: 30px; right: 30px;
+    width: 44px; height: 44px;
+    background: rgba(30, 32, 50, 0.9);
+    border: 1px solid var(--border-light);
+    border-radius: 50%;
+    color: var(--accent-primary);
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 20px;
-}
-
-.map-widget-container {
-    width: 100%;
-    height: 100%;
-    max-width: 1600px;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border-glow);
-    background: #0b0c15;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 0 100px rgba(0,0,0,0.8);
-    position: relative;
-}
-
-/* Header Bar */
-.map-header {
-    height: 60px;
-    padding: 0 25px;
-    background: linear-gradient(90deg, #1a1b2e 0%, #0b0c15 100%);
-    border-bottom: 1px solid var(--border-dim);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    z-index: 10;
-}
-
-.map-header h2 {
-    font-size: 18px;
-    color: var(--accent-primary);
-    letter-spacing: 4px;
-    text-transform: uppercase;
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
-.map-header h2 i { opacity: 0.7; }
-
-/* Canvas Area */
-.map-canvas-wrapper {
-    flex: 1;
-    position: relative;
-    background: radial-gradient(circle at center, #111 0%, #000 100%);
-    overflow: hidden;
-        /* Critical for mobile game controls: disables native scrolling/zooming */
-    touch-action: none; 
-    -webkit-user-select: none;
-    user-select: none;
-}
-
-#full-galaxy-canvas {
-    width: 100%;
-    height: 100%;
-    cursor: crosshair;
-        /* Critical for mobile game controls: disables native scrolling/zooming */
-    touch-action: none; 
-    -webkit-user-select: none;
-    user-select: none;
-}
-
-/* Map Overlays (Search & Info) */
-.map-controls-overlay {
-    position: absolute;
-    top: 20px; left: 20px;
-    pointer-events: none; /* Let clicks pass to canvas */
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.search-container {
-    pointer-events: auto;
-    display: flex;
-    background: rgba(11, 12, 21, 0.9);
-    border: 1px solid var(--border-light);
-    border-radius: 4px;
-    padding: 5px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    backdrop-filter: blur(5px);
-}
-
-#map-search-input {
-    background: transparent;
-    border: none;
-    color: #fff;
-    padding: 8px 12px;
-    width: 250px;
-    font-family: var(--font-main);
-    font-size: 14px;
-}
-#map-search-input::placeholder { color: #556; }
-
-#map-search-btn {
-    background: transparent;
-    border: none;
-    color: var(--accent-primary);
-    padding: 0 15px;
     cursor: pointer;
-    transition: color 0.2s;
-    /* Mobile optimizations */
+    z-index: 45;
+    transition: all 0.2s;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
     min-width: var(--mobile-tap-target);
     min-height: var(--mobile-tap-target);
 }
-#map-search-btn:hover { color: #fff; }
-
-.map-info-box {
-    pointer-events: auto;
-    background: rgba(11, 12, 21, 0.95);
-    border: 1px solid var(--accent-warning); /* Gold border for selection */
-    border-left: 4px solid var(--accent-warning);
-    padding: 20px;
-    border-radius: 4px;
-    width: 280px;
-    display: none; /* Hidden until selection */
-    flex-direction: column;
-    gap: 15px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-    animation: slideInLeft 0.3s ease-out;
+.map-center-btn:hover { 
+    background: var(--accent-primary); 
+    color: #000;
+    box-shadow: 0 0 20px var(--accent-primary);
 }
 
-.map-info-box.active { display: flex; }
-
-.info-details strong {
-    color: var(--accent-warning);
-    font-size: 18px;
-    display: block;
-    margin-bottom: 5px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    padding-bottom: 5px;
-}
-
-.info-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 4px;
-    font-size: 12px;
-}
-.info-label { color: #888; }
-.info-val { color: #fff; font-weight: bold; }
-
-@keyframes slideInLeft {
-    from { opacity: 0; transform: translateX(-20px); }
-    to { opacity: 1; transform: translateX(0); }
-}
-
-/* ==========================================================================
-   14. DYNAMIC ENCOUNTER THEMES
-   Classes to be toggled on .encounter-container based on type
-   ========================================================================== */
-
-/* Pirate Theme (Red/Gritty) */
-.theme-pirate .encounter-container {
-    border-color: var(--accent-danger);
-    box-shadow: 0 0 50px rgba(255, 102, 102, 0.2);
-}
-.theme-pirate .encounter-header { color: var(--accent-danger); border-bottom-color: rgba(255, 102, 102, 0.3); }
-
-/* Police Theme (Blue/Clean) */
-.theme-police .encounter-container {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 50px rgba(102, 204, 255, 0.2);
-}
-.theme-police .encounter-header { color: var(--accent-primary); border-bottom-color: rgba(102, 204, 255, 0.3); }
-
-/* Anomaly Theme (Purple/Ethereal) */
-.theme-anomaly .encounter-container {
-    border-color: var(--accent-rare);
-    box-shadow: 0 0 50px rgba(176, 136, 255, 0.2);
-}
-.theme-anomaly .encounter-header { color: var(--accent-rare); border-bottom-color: rgba(176, 136, 255, 0.3); }
-
-/* Hazard Theme (Orange/Warning) */
-.theme-hazard .encounter-container {
-    border-color: var(--accent-warning);
-    box-shadow: 0 0 50px rgba(255, 204, 102, 0.2);
-}
-.theme-hazard .encounter-header { color: var(--accent-warning); border-bottom-color: rgba(255, 204, 102, 0.3); }
-
-/* ==========================================================================
-   15. HELPER CLASSES
-   For dynamic HTML injection via JS
-   ========================================================================== */
-.text-success { color: var(--accent-success) !important; }
-.text-danger { color: var(--accent-danger) !important; }
-.text-warning { color: var(--accent-warning) !important; }
-.text-info { color: var(--accent-primary) !important; }
-.text-muted { color: var(--accent-secondary) !important; }
-
-.blink { animation: blinkAnim 1s infinite; }
-
-@keyframes blinkAnim {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-/* Button close on map */
-.close-map-btn {
+.close-map-btn, .btn-close {
     background: transparent;
     border: 1px solid var(--border-dim);
     color: var(--accent-secondary);
     width: 32px; height: 32px;
-    border-radius: 4px;
+    border-radius: 4px; /* Circle for btn-close */
     cursor: pointer;
     transition: all 0.2s;
-    /* Mobile optimizations */
     min-width: var(--mobile-tap-target);
     min-height: var(--mobile-tap-target);
     display: flex;
     align-items: center;
     justify-content: center;
 }
-.close-map-btn:hover {
-    border-color: var(--accent-danger);
-    color: var(--accent-danger);
-    transform: rotate(90deg);
-}
+.btn-close { border-radius: 50%; border-color: transparent; font-size: 16px; color: #888; }
+.close-map-btn:hover, .btn-close:hover { border-color: var(--accent-danger); color: var(--accent-danger); }
+.close-map-btn:hover { transform: rotate(90deg); }
 
-.close-map-btn:active {
-    transform: scale(0.9) rotate(90deg);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1);
+/* Notifications */
+.notification {
+    position: absolute;
+    top: 80px; left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: rgba(10, 15, 30, 0.95);
+    border: 1px solid var(--accent-primary);
+    border-radius: 4px;
+    padding: 12px 30px;
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 1px;
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: var(--z-overlay-top);
+    pointer-events: none;
+    box-shadow: 0 0 30px rgba(102, 204, 255, 0.3);
+    text-transform: uppercase;
 }
+.pulse-alert { animation: pulseRed 2s infinite; }
+
 /* ==========================================================================
-   16. GENERIC UI COMPONENTS (Buttons, Inputs, Cards)
+   5. COMPONENT STYLES (Buttons, Tabs, Lists)
    ========================================================================== */
-
-/* --- Standard Action Buttons (Used in Panels) --- */
+/* Generic Button */
 .btn {
     display: inline-flex;
     justify-content: center;
@@ -1451,13 +350,9 @@ body, html {
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    /* Mobile optimizations */
     min-height: var(--mobile-tap-target);
     min-width: var(--mobile-tap-target);
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
 }
-
 .btn:hover {
     background: rgba(255,255,255,0.1);
     color: #fff;
@@ -1465,15 +360,6 @@ body, html {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
-
-.btn:active {
-    box-shadow: none;
-    transform: scale(0.95);
-    filter: brightness(1.2);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1), 
-                filter var(--mobile-tap-fast) ease;
-}
-
 .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -1481,101 +367,265 @@ body, html {
     border-color: transparent;
     pointer-events: none;
 }
-
-/* --- Primary Action (Engage/Start) --- */
-
-/* Scan Button Style */
-.btn-scan {
-    background: rgba(176, 136, 255, 0.1);
-    border-color: var(--accent-rare); /* Purple */
-    color: var(--accent-rare);
-    transition: all 0.3s ease;
+.btn.small {
+    padding: 4px 10px;
+    font-size: 11px;
+    min-height: calc(var(--mobile-tap-target) - 8px);
+    min-width: calc(var(--mobile-tap-target) - 8px);
 }
 
-.btn-scan:hover {
-    background: var(--accent-rare);
-    color: #000;
-    box-shadow: 0 0 15px rgba(176, 136, 255, 0.4);
-}
-
-.btn-scan i {
-    animation: pulse-icon 2s infinite;
-}
-
-@keyframes pulse-icon {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.2); opacity: 0.7; }
-    100% { transform: scale(1); opacity: 1; }
-}
-
+/* Action / Scan Buttons */
 .btn-action {
     background: var(--accent-primary);
     color: #0b0c15;
     border: none;
     font-weight: 800;
+    font-size: 16px;
+    letter-spacing: 2px;
+    box-shadow: 0 0 20px rgba(102, 204, 255, 0.4);
 }
 .btn-action:hover {
     background: #fff;
-    box-shadow: 0 0 20px rgba(102, 204, 255, 0.4);
+    box-shadow: 0 0 40px rgba(102, 204, 255, 0.6);
+    transform: scale(1.02);
 }
+.btn-scan {
+    background: rgba(176, 136, 255, 0.1);
+    border-color: var(--accent-rare);
+    color: var(--accent-rare);
+    transition: all 0.3s ease;
+}
+.btn-scan:hover {
+    background: var(--accent-rare);
+    color: #000;
+    box-shadow: 0 0 15px rgba(176, 136, 255, 0.4);
+}
+.btn-scan i { animation: pulse-icon 2s infinite; }
 
-/* --- Trade Buttons (Buy/Sell) --- */
+/* Trade Buttons */
 .btn-buy, .btn-sell {
     padding: 4px 8px;
     font-size: 10px;
     min-width: 60px;
 }
+.btn-buy { border-color: rgba(102, 255, 153, 0.3); color: var(--accent-success); }
+.btn-buy:hover { background: rgba(102, 255, 153, 0.1); border-color: var(--accent-success); box-shadow: 0 0 10px rgba(102, 255, 153, 0.2); }
+.btn-sell { border-color: rgba(255, 102, 102, 0.3); color: var(--accent-danger); }
+.btn-sell:hover { background: rgba(255, 102, 102, 0.1); border-color: var(--accent-danger); box-shadow: 0 0 10px rgba(255, 102, 102, 0.2); }
 
-.btn-buy {
-    border-color: rgba(102, 255, 153, 0.3);
-    color: var(--accent-success);
+/* Combat Buttons */
+.combat-btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border-light);
+    color: #ddd;
+    padding: 15px 10px;
+    border-radius: 6px;
+    font-family: var(--font-main);
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+    min-height: var(--mobile-tap-target);
+    min-width: 120px;
 }
-.btn-buy:hover {
-    background: rgba(102, 255, 153, 0.1);
-    border-color: var(--accent-success);
-    box-shadow: 0 0 10px rgba(102, 255, 153, 0.2);
+.combat-btn:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+.combat-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; filter: grayscale(1); }
+.combat-btn.attack { border-bottom: 3px solid var(--accent-danger); }
+.combat-btn.attack:hover { background: rgba(255, 102, 102, 0.1); color: #fff; box-shadow: 0 0 15px rgba(255, 102, 102, 0.2); }
+.combat-btn.evade { border-bottom: 3px solid var(--accent-primary); }
+.combat-btn.evade:hover { background: rgba(102, 204, 255, 0.1); color: #fff; box-shadow: 0 0 15px rgba(102, 204, 255, 0.2); }
+.combat-btn.escape { border-bottom: 3px solid var(--accent-warning); }
+.combat-btn.escape:hover { background: rgba(255, 204, 102, 0.1); color: #fff; box-shadow: 0 0 15px rgba(255, 204, 102, 0.2); }
+
+/* Tabs */
+.tabs {
+    display: flex;
+    background: #080910;
+    border-bottom: 1px solid var(--border-dim);
+    overflow-x: auto;
+}
+.tab {
+    flex: 1;
+    padding: 15px 10px;
+    text-align: center;
+    font-size: 10px;
+    color: var(--accent-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 2px solid transparent;
+    border-right: 1px solid rgba(255,255,255,0.02);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    min-height: var(--mobile-tap-target);
+    min-width: 60px;
+}
+.tab i { font-size: 16px; margin-bottom: 2px; }
+.tab:hover { background: rgba(255,255,255,0.05); color: #fff; }
+.tab.active {
+    color: var(--accent-primary);
+    border-bottom: 2px solid var(--accent-primary);
+    background: rgba(102, 204, 255, 0.05);
 }
 
-.btn-sell {
-    border-color: rgba(255, 102, 102, 0.3);
-    color: var(--accent-danger);
+/* ==========================================================================
+   6. PANEL CONTENT & MODULES
+   ========================================================================== */
+.tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    position: relative;
 }
-.btn-sell:hover {
-    background: rgba(255, 102, 102, 0.1);
-    border-color: var(--accent-danger);
-    box-shadow: 0 0 10px rgba(255, 102, 102, 0.2);
+.panel-section h2 {
+    margin: 0 0 20px 0;
+    font-size: 14px;
+    color: var(--accent-primary);
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-/* --- Close Button (Icon Only) --- */
-.btn-close {
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border-radius: 50%;
-    border: 1px solid transparent;
+/* Status Dashboard */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.stat {
+    background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+    border: 1px solid var(--border-dim);
+    border-left: 2px solid var(--border-light);
+    padding: 12px 15px;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+.stat:hover { background: rgba(255,255,255,0.05); border-left-color: var(--accent-primary); transform: translateX(2px); }
+.stat span:first-child { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-secondary); margin-bottom: 5px; }
+.stat-value { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: 0.5px; font-family: var(--font-mono); }
+#hull { color: var(--accent-danger); text-shadow: 0 0 10px rgba(255, 102, 102, 0.3); }
+#credits { color: var(--accent-success); }
+#fuel { color: var(--accent-warning); }
+
+/* Nav Computer */
+.nav-computer {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border-dim);
+    border-top: 2px solid var(--accent-primary);
+    border-radius: 0 0 6px 6px;
+    padding: 15px;
+    margin-top: 5px;
+    position: relative;
+}
+.nav-computer::before {
+    content: "NAV-COM ONLINE";
+    position: absolute;
+    top: -10px; right: 10px;
+    font-size: 14px;
+    background: var(--bg-panel);
+    padding: 0 5px;
+    color: var(--accent-primary);
+    border: 1px solid var(--border-dim);
+}
+.nav-computer .stat {
     background: transparent;
-    color: #888;
-    font-size: 16px;
-    /* Mobile optimizations */
-    min-width: var(--mobile-tap-target);
+    border: none;
+    border-bottom: 1px dashed rgba(255,255,255,0.1);
+    padding: 8px 0;
+    margin: 0;
+    border-radius: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.nav-computer .stat:last-of-type { border-bottom: none; }
+.nav-computer .stat-value { font-size: 13px; }
+.mobile-controls {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 10px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-dim);
+}
+
+/* System Overview */
+.system-overview-grid { display: flex; flex-direction: column; gap: 15px; }
+.system-overview-item {
+    background: rgba(19, 20, 31, 0.6);
+    border: 1px solid var(--border-dim);
+    padding: 15px;
+    border-radius: 6px;
+    position: relative;
+    min-height: var(--mobile-tap-target);
+}
+.system-overview-item:first-child {
+    background: linear-gradient(90deg, rgba(102, 204, 255, 0.05) 0%, transparent 100%);
+    border-left: 3px solid var(--accent-primary);
+}
+.system-overview-item h3 {
+    margin: 0 0 12px 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--accent-secondary);
+    letter-spacing: 1px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding-bottom: 5px;
+}
+.system-overview-item div[id^="overview-"], .system-overview-item div[id^="current-"] {
+    display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; color: #ccc;
+}
+#current-system-name { font-size: 18px; color: #fff; font-weight: bold; letter-spacing: 1px; margin-bottom: 5px; text-shadow: 0 0 10px rgba(102, 204, 255, 0.2); }
+#overview-threat { font-weight: bold; color: var(--accent-danger); }
+
+/* Nearby Systems */
+#nearby-systems { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; max-height: 150px; overflow-y: auto; padding-right: 5px; }
+#nearby-systems .system-overview-item {
+    padding: 10px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
     min-height: var(--mobile-tap-target);
     display: flex;
     align-items: center;
-    justify-content: center;
 }
-.btn-close:hover {
-    color: #fff;
-    background: rgba(255,255,255,0.1);
-}
+#nearby-systems .system-overview-item:hover { background: rgba(255,255,255,0.05); border-color: var(--border-light); transform: translateX(4px); }
 
-.btn-close:active {
-    transform: scale(0.9);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1);
+/* Market Grid */
+.market-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 0.8fr 1.2fr;
+    gap: 10px;
+    align-items: center;
 }
+.market-header { font-size: 10px; font-weight: bold; color: var(--accent-secondary); text-transform: uppercase; padding-bottom: 8px; border-bottom: 1px solid var(--border-dim); }
+.market-item { display: contents; }
+.market-item > div { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 12px; }
+.market-controls { display: flex; align-items: center; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border-dim); }
+.market-controls button { margin-right: 5px; padding: 4px 12px; min-width: 40px; min-height: var(--mobile-tap-target); }
 
+/* Cargo */
 .cargo-item {
     display: grid;
-    grid-template-columns: 2fr 0.5fr 1.5fr; /* Adjusted columns */
+    grid-template-columns: 2fr 0.5fr 1.5fr;
     gap: 10px;
     padding: 10px 0;
     border-bottom: 1px solid rgba(255,255,255,0.05);
@@ -1583,73 +633,7 @@ body, html {
     font-size: 13px;
 }
 
-/* ==========================================================================
-   17. TAB SPECIFIC LAYOUTS (Contracts, Shipyard)
-   ========================================================================== */
-
-/* --- Contract Cards --- */
-.contract-item {
-    background: rgba(255,255,255,0.02);
-    border: 1px solid var(--border-dim);
-    border-radius: 6px;
-    padding: 15px;
-    margin-bottom: 12px;
-    transition: all 0.2s;
-    position: relative;
-    overflow: hidden;
-}
-
-.contract-item:hover {
-    border-color: var(--border-light);
-    background: rgba(255,255,255,0.04);
-    transform: translateX(4px);
-}
-
-.contract-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #fff;
-}
-.contract-header span:first-child { display: flex; align-items: center; gap: 8px; }
-.contract-reward { color: var(--accent-warning); }
-
-.contract-details {
-    font-size: 11px;
-    color: var(--accent-secondary);
-    line-height: 1.4;
-    margin-bottom: 12px;
-    border-left: 2px solid var(--border-dim);
-    padding-left: 10px;
-}
-
-.contract-button {
-    width: 100%;
-    padding: 8px;
-    font-size: 11px;
-    border-color: var(--accent-primary);
-    color: var(--accent-primary);
-    background: rgba(102, 204, 255, 0.05);
-    /* Mobile optimizations */
-    min-height: var(--mobile-tap-target);
-}
-.contract-button:hover {
-    background: var(--accent-primary);
-    color: #000;
-}
-
-.contract-button:active {
-    transform: scale(0.95);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ==========================================================================
-   SHIPYARD & SHIP VIEW STYLES
-   ========================================================================== */
-
+/* Shipyard */
 .ship-overview-panel {
     background: rgba(0,0,0,0.3);
     border: 1px solid var(--border-dim);
@@ -1662,8 +646,6 @@ body, html {
     position: relative;
     overflow: hidden;
 }
-
-/* Decorative grid background */
 .ship-overview-panel::before {
     content: "";
     position: absolute;
@@ -1673,442 +655,353 @@ body, html {
     opacity: 0.3;
     pointer-events: none;
 }
-
-.ship-visual {
-    text-align: center;
-    margin-bottom: 20px;
-    z-index: 2;
-}
-
+.ship-visual { text-align: center; margin-bottom: 20px; z-index: 2; }
 .ship-icon-large {
-    font-size: 64px;
-    color: var(--accent-primary);
+    font-size: 64px; color: var(--accent-primary);
     filter: drop-shadow(0 0 15px rgba(102, 204, 255, 0.4));
     margin-bottom: 10px;
     animation: hoverFloat 4s infinite ease-in-out;
 }
-
-@keyframes hoverFloat {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
-}
-
-.ship-name {
-    font-size: 16px;
-    font-weight: 800;
-    letter-spacing: 2px;
-    color: #fff;
-}
-
-.ship-class {
-    font-size: 10px;
-    color: var(--accent-secondary);
-    text-transform: uppercase;
-}
-
-/* Detailed Stats Section */
-.ship-stats-detailed {
-    width: 100%;
-    z-index: 2;
-}
-
-.stat-row {
-    display: flex;
-    align-items: center;
-    margin-bottom: 8px;
-    font-size: 11px;
-}
-
-.stat-label {
-    width: 70px;
-    color: var(--accent-secondary);
-    font-weight: 600;
-}
-
-.stat-bar-container {
-    flex: 1;
-    height: 6px;
-    background: #222;
-    border-radius: 3px;
-    margin: 0 10px;
-    overflow: hidden;
-}
-
-.stat-bar-fill {
-    height: 100%;
-    border-radius: 3px;
-    box-shadow: 0 0 5px currentColor;
-}
-
-.stat-val {
-    width: 60px;
-    text-align: right;
-    font-family: var(--font-mono);
-    color: #fff;
-}
-
-.lvl-badge {
-    display: inline-block;
-    font-size: 9px;
-    background: var(--accent-primary);
-    color: #000;
-    padding: 1px 4px;
-    border-radius: 3px;
-    margin-left: 6px;
-    vertical-align: middle;
-    font-weight: 800;
-}
-
-/* Mini Grid for secondary stats */
-.stat-grid-small {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 1px solid var(--border-dim);
-}
-
-.mini-stat {
-    background: rgba(255,255,255,0.03);
-    padding: 8px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 11px;
-    color: #ccc;
-}
+.ship-name { font-size: 16px; font-weight: 800; letter-spacing: 2px; color: #fff; }
+.ship-class { font-size: 10px; color: var(--accent-secondary); text-transform: uppercase; }
+.ship-stats-detailed { width: 100%; z-index: 2; }
+.stat-row { display: flex; align-items: center; margin-bottom: 8px; font-size: 11px; }
+.stat-label { width: 70px; color: var(--accent-secondary); font-weight: 600; }
+.stat-bar-container { flex: 1; height: 6px; background: #222; border-radius: 3px; margin: 0 10px; overflow: hidden; }
+.stat-bar-fill { height: 100%; border-radius: 3px; box-shadow: 0 0 5px currentColor; }
+.stat-val { width: 60px; text-align: right; font-family: var(--font-mono); color: #fff; }
+.lvl-badge { display: inline-block; font-size: 9px; background: var(--accent-primary); color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 6px; vertical-align: middle; font-weight: 800; }
+.stat-grid-small { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-dim); }
+.mini-stat { background: rgba(255,255,255,0.03); padding: 8px; border-radius: 4px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: #ccc; }
 .mini-stat i { color: var(--accent-primary); width: 15px; text-align: center; }
 
-/* Upgrade List Styling */
-.upgrade-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
+/* Upgrade List */
+.upgrade-list { display: flex; flex-direction: column; gap: 10px; }
 .upgrade-item {
-    display: flex;
-    align-items: center;
+    display: flex; align-items: center;
     background: rgba(20, 25, 35, 0.8);
     border: 1px solid var(--border-dim);
     padding: 10px;
     border-radius: 6px;
     transition: all 0.2s;
-    /* Mobile optimizations */
     min-height: var(--mobile-tap-target);
 }
-
-.upgrade-item:hover {
-    border-color: var(--border-light);
-    transform: translateX(2px);
-}
-
-.upgrade-item:active {
-    transform: scale(0.98);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.upgrade-icon {
-    width: 40px;
-    height: 40px;
-    background: rgba(0,0,0,0.3);
-    border-radius: 4px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: var(--accent-warning);
-    font-size: 18px;
-    margin-right: 12px;
-}
-
-.upgrade-info {
-    flex: 1;
-}
-
+.upgrade-item:hover { border-color: var(--border-light); transform: translateX(2px); }
+.upgrade-icon { width: 40px; height: 40px; background: rgba(0,0,0,0.3); border-radius: 4px; display: flex; justify-content: center; align-items: center; color: var(--accent-warning); font-size: 18px; margin-right: 12px; }
+.upgrade-info { flex: 1; }
 .upgrade-name { font-weight: 700; font-size: 12px; color: #fff; }
 .upgrade-desc { font-size: 10px; color: #888; line-height: 1.2; }
 .upgrade-bonus { font-size: 10px; color: var(--accent-success); margin-top: 2px; }
-
-.upgrade-action {
-    text-align: right;
-    min-width: 70px;
-}
-
-.upgrade-cost {
-    font-size: 10px;
-    font-family: var(--font-mono);
-    margin-bottom: 5px;
-}
-
-.upgrade-buy {
-    /* Mobile optimizations */
-    min-height: calc(var(--mobile-tap-target) - 8px);
-    min-width: 80px;
-}
-
-.upgrade-buy:active {
-    transform: scale(0.95);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* No Service Message */
-.no-service-msg {
-    text-align: center;
-    padding: 40px 20px;
-    border: 1px dashed var(--border-dim);
-    border-radius: 8px;
-    color: var(--accent-secondary);
-}
+.upgrade-action { text-align: right; min-width: 70px; }
+.upgrade-cost { font-size: 10px; font-family: var(--font-mono); margin-bottom: 5px; }
+.no-service-msg { text-align: center; padding: 40px 20px; border: 1px dashed var(--border-dim); border-radius: 8px; color: var(--accent-secondary); }
 .no-service-msg i { font-size: 32px; margin-bottom: 10px; opacity: 0.5; }
 .no-service-msg p { font-weight: bold; margin-bottom: 5px; }
 
-/* ==========================================================================
-   18. UTILITY ANIMATIONS & EFFECTS
-   ========================================================================== */
-
-/* Blinking Cursor for Terminal Logs */
-.cursor-blink {
-    display: inline-block;
-    width: 6px;
-    height: 12px;
-    background: var(--accent-success);
-    animation: blinkCursor 1s infinite steps(2);
-    vertical-align: middle;
-    margin-left: 2px;
+/* Contracts */
+.contract-item {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border-dim);
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 12px;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+    min-height: var(--mobile-tap-target);
 }
-
-.unselectable {
-  -moz-user-select: none;
-  -khtml-user-select: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-@keyframes blinkCursor {
-    0% { opacity: 1; }
-    100% { opacity: 0; }
-}
-
-/* Pulse Animation for Critical UI */
-.pulse-alert {
-    animation: pulseRed 2s infinite;
-}
-@keyframes pulseRed {
-    0% { box-shadow: 0 0 0 0 rgba(255, 102, 102, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(255, 102, 102, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(255, 102, 102, 0); }
-}
+.contract-item:hover { border-color: var(--border-light); background: rgba(255,255,255,0.04); transform: translateX(4px); }
+.contract-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; font-weight: 700; color: #fff; }
+.contract-header span:first-child { display: flex; align-items: center; gap: 8px; }
+.contract-reward { color: var(--accent-warning); }
+.contract-details { font-size: 11px; color: var(--accent-secondary); line-height: 1.4; margin-bottom: 12px; border-left: 2px solid var(--border-dim); padding-left: 10px; }
+.contract-button { width: 100%; padding: 8px; font-size: 11px; border-color: var(--accent-primary); color: var(--accent-primary); background: rgba(102, 204, 255, 0.05); min-height: var(--mobile-tap-target); }
+.contract-button:hover { background: var(--accent-primary); color: #000; }
 
 /* ==========================================================================
-   19. MOBILE ADJUSTMENTS FOR MODALS & BUTTONS
+   7. MODALS & FULL SCREENS
    ========================================================================== */
-@media (max-width: 600px) {
-    /* Make buttons bigger and more touch-friendly */
-    :root {
-        --mobile-tap-target: 48px; /* Even bigger on small mobile */
-    }
-    
-    .btn, button, .tab, .combat-btn, .market-controls button {
-        min-height: var(--mobile-tap-target);
-        min-width: var(--mobile-tap-target);
-        padding: 12px 16px;
-    }
-    
-    .btn.small {
-        min-height: calc(var(--mobile-tap-target) - 8px);
-        min-width: calc(var(--mobile-tap-target) - 8px);
-        padding: 8px 12px;
-    }
-    
-    /* Ensure all interactive elements have proper touch feedback */
-    .size-option, 
-    .upgrade-item,
-    .contract-item,
-    .system-overview-item {
-        min-height: var(--mobile-tap-target);
-    }
-    
-    /* Improve modal spacing for mobile */
-    .encounter-body {
-        padding: 20px 15px;
-    }
-    
-    .combat-options {
-        padding: 15px;
-        gap: 10px;
-    }
-    
-    /* Better scroll areas */
-    .tab-content {
-        padding: 15px;
-    }
-    
-    /* Improve form elements */
-    input, select, textarea {
-        font-size: 16px; /* Prevents zoom on iOS */
-        min-height: var(--mobile-tap-target);
-    }
+/* Generic Modal Overlay */
+.modal-overlay, .galaxy-map-modal, .game-over-screen, .init-screen, .loading-screen {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: var(--z-modal-backdrop);
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
-/* Additional mobile optimizations for very small screens */
-@media (max-width: 380px) {
-    .tabs {
-        flex-wrap: nowrap;
-        overflow-x: auto;
-    }
-    
-    .tab {
-        min-width: 80px;
-        font-size: 9px;
-    }
-    
-    .tab i {
-        font-size: 14px;
-    }
+/* Initialization / Start Screen */
+.init-screen {
+    background: radial-gradient(circle at center, #1a1b2e 0%, #000 100%);
+    z-index: 9999;
+    flex-direction: column;
+    transition: opacity 0.8s ease-out;
 }
+.game-title {
+    font-size: 4rem; font-weight: 800; line-height: 1; color: #fff;
+    text-shadow: 0 0 20px var(--accent-primary), 0 0 40px var(--accent-primary);
+    text-align: center; margin-bottom: 10px; letter-spacing: 5px;
+    animation: glowPulse 3s infinite alternate;
+}
+.subtitle { font-size: 1.2rem; color: var(--accent-secondary); letter-spacing: 8px; text-transform: uppercase; margin-bottom: 50px; }
+.setup-box {
+    background: rgba(255,255,255,0.03);
+    padding: 40px;
+    border-radius: 16px;
+    border: 1px solid var(--border-light);
+    width: 90%; max-width: 500px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+.galaxy-size-selector { display: flex; gap: 15px; margin-bottom: 25px; }
+.size-option {
+    flex: 1; background: rgba(0,0,0,0.4); border: 2px solid transparent; padding: 20px 10px;
+    border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.2s;
+    min-height: var(--mobile-tap-target);
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+}
+.size-option:hover { background: rgba(255,255,255,0.05); }
+.size-option.selected { border-color: var(--accent-primary); background: rgba(102, 204, 255, 0.1); box-shadow: 0 0 20px rgba(102, 204, 255, 0.2); }
+.size-option .icon { font-size: 24px; margin-bottom: 10px; color: var(--accent-secondary); }
+.size-option.selected .icon { color: var(--accent-primary); }
+
+/* Encounter Modal */
+.modal-overlay { background: rgba(5, 6, 8, 0.85); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); opacity: 0; transition: opacity 0.3s ease-in-out; }
+.encounter-container {
+    background: #151621;
+    width: 90%; max-width: 600px; max-height: 90vh;
+    border: 1px solid var(--border-light);
+    box-shadow: 0 0 50px rgba(0,0,0,0.8), 0 0 15px rgba(100,100,100,0.1);
+    border-radius: 12px;
+    position: relative;
+    transform: scale(0.95);
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    overflow-y: auto;
+}
+.modal-overlay[style*="opacity: 1"] .encounter-container { transform: scale(1); }
+.encounter-header {
+    background: rgba(0,0,0,0.2);
+    padding: 20px;
+    border-bottom: 1px solid var(--border-dim);
+    display: flex; align-items: center; justify-content: center; gap: 15px;
+    border-radius: 12px 12px 0 0;
+}
+.encounter-header i { font-size: 28px; }
+.encounter-header h2 { margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 3px; font-weight: 700; }
+.encounter-body { padding: 25px; font-size: 15px; line-height: 1.6; color: #ccc; min-height: 100px; }
+.combat-log {
+    background: #000;
+    border-top: 1px solid var(--border-dim); border-bottom: 1px solid var(--border-dim);
+    height: 140px; overflow-y: auto; padding: 10px 20px;
+    font-family: var(--font-mono); font-size: 12px; color: #8899aa;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+}
+.combat-options { padding: 20px; background: rgba(0,0,0,0.2); border-radius: 0 0 12px 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; }
+
+/* Dynamic Encounter Themes */
+.theme-pirate .encounter-container { border-color: var(--accent-danger); box-shadow: 0 0 50px rgba(255, 102, 102, 0.2); }
+.theme-pirate .encounter-header { color: var(--accent-danger); border-bottom-color: rgba(255, 102, 102, 0.3); }
+.theme-police .encounter-container { border-color: var(--accent-primary); box-shadow: 0 0 50px rgba(102, 204, 255, 0.2); }
+.theme-police .encounter-header { color: var(--accent-primary); border-bottom-color: rgba(102, 204, 255, 0.3); }
+.theme-anomaly .encounter-container { border-color: var(--accent-rare); box-shadow: 0 0 50px rgba(176, 136, 255, 0.2); }
+.theme-anomaly .encounter-header { color: var(--accent-rare); border-bottom-color: rgba(176, 136, 255, 0.3); }
+.theme-hazard .encounter-container { border-color: var(--accent-warning); box-shadow: 0 0 50px rgba(255, 204, 102, 0.2); }
+.theme-hazard .encounter-header { color: var(--accent-warning); border-bottom-color: rgba(255, 204, 102, 0.3); }
+
+/* Full Galaxy Map Modal */
+.galaxy-map-modal { background: rgba(5, 6, 8, 0.98); z-index: 1500; padding: 20px; }
+.map-widget-container {
+    width: 100%; height: 100%; max-width: 1600px;
+    display: flex; flex-direction: column;
+    border: 1px solid var(--border-glow); background: #0b0c15;
+    border-radius: 8px; overflow: hidden; box-shadow: 0 0 100px rgba(0,0,0,0.8);
+    position: relative;
+}
+.map-header {
+    height: 60px; padding: 0 25px;
+    background: linear-gradient(90deg, #1a1b2e 0%, #0b0c15 100%);
+    border-bottom: 1px solid var(--border-dim);
+    display: flex; justify-content: space-between; align-items: center; z-index: 10;
+}
+.map-header h2 { font-size: 18px; color: var(--accent-primary); letter-spacing: 4px; text-transform: uppercase; display: flex; align-items: center; gap: 15px; }
+.map-header h2 i { opacity: 0.7; }
+.map-canvas-wrapper {
+    flex: 1; position: relative;
+    background: radial-gradient(circle at center, #111 0%, #000 100%);
+    overflow: hidden; touch-action: none;
+}
+#full-galaxy-canvas { width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.map-controls-overlay { position: absolute; top: 20px; left: 20px; pointer-events: none; display: flex; flex-direction: column; gap: 15px; }
+.search-container { pointer-events: auto; display: flex; background: rgba(11, 12, 21, 0.9); border: 1px solid var(--border-light); border-radius: 4px; padding: 5px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); backdrop-filter: blur(5px); }
+#map-search-input { background: transparent; border: none; color: #fff; padding: 8px 12px; width: 250px; font-family: var(--font-main); font-size: 14px; }
+#map-search-btn { background: transparent; border: none; color: var(--accent-primary); padding: 0 15px; cursor: pointer; transition: color 0.2s; min-width: var(--mobile-tap-target); min-height: var(--mobile-tap-target); }
+#map-search-btn:hover { color: #fff; }
+.map-info-box {
+    pointer-events: auto; background: rgba(11, 12, 21, 0.95);
+    border: 1px solid var(--accent-warning); border-left: 4px solid var(--accent-warning);
+    padding: 20px; border-radius: 4px; width: 280px;
+    display: none; flex-direction: column; gap: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    animation: slideInLeft 0.3s ease-out;
+}
+.map-info-box.active { display: flex; }
+.info-details strong { color: var(--accent-warning); font-size: 18px; display: block; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; }
+.info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; }
+.info-label { color: #888; }
+.info-val { color: #fff; font-weight: bold; }
+
+/* Game Over Screen */
+.game-over-screen { background: rgba(0, 0, 0, 0.95); z-index: 3000; backdrop-filter: blur(10px); animation: fadeIn 2s ease-out; }
+.game-over-box {
+    text-align: center; padding: 60px 40px;
+    border: 2px solid var(--accent-danger); border-radius: 12px;
+    background: linear-gradient(135deg, #1a0a0a 0%, #000 100%);
+    width: 90%; max-width: 550px;
+    box-shadow: 0 0 100px rgba(255, 0, 0, 0.2);
+    position: relative; overflow: hidden;
+}
+.game-over-box::before {
+    content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: repeating-linear-gradient(0deg, rgba(255, 0, 0, 0.05), rgba(255, 0, 0, 0.05) 1px, transparent 1px, transparent 3px);
+    pointer-events: none;
+}
+.game-over-box h1 {
+    color: var(--accent-danger); font-size: 3rem; margin-bottom: 10px;
+    text-transform: uppercase; letter-spacing: 5px; text-shadow: 0 0 20px var(--accent-danger);
+    animation: glitchText 3s infinite;
+}
+.game-over-box p { color: #888; font-size: 1.2rem; margin-bottom: 40px; letter-spacing: 2px; text-transform: uppercase; }
+.game-over-stats { display: grid; gap: 15px; text-align: left; background: rgba(255, 0, 0, 0.05); padding: 20px; border-radius: 8px; border: 1px solid rgba(255, 0, 0, 0.2); margin-bottom: 30px; }
+.game-over-stats div { display: flex; justify-content: space-between; font-size: 1.1rem; border-bottom: 1px dashed rgba(255, 0, 0, 0.2); padding-bottom: 5px; }
+.game-over-stats div:last-child { border-bottom: none; }
+
+/* Loading Screen */
+.loading-screen { background: #000; z-index: 2000; }
+.progress-container { width: 100%; height: 4px; background: #222; border-radius: 2px; overflow: hidden; margin-top: 10px; }
+.progress-bar { height: 100%; background: var(--accent-primary); width: 0%; transition: width 0.1s linear; box-shadow: 0 0 10px var(--accent-primary); }
 
 /* ==========================================================================
-   20. FAST TAP ANIMATIONS FOR ALL INTERACTIVE ELEMENTS
+   8. ANIMATIONS
    ========================================================================== */
+@keyframes interfaceFadeIn { to { opacity: 1; } }
+@keyframes pointerBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+@keyframes glowPulse { from { text-shadow: 0 0 20px var(--accent-primary); } to { text-shadow: 0 0 40px var(--accent-primary), 0 0 80px var(--accent-primary); } }
+@keyframes pulseText { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+@keyframes slideInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes blinkAnim { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes blinkCursor { 0% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes pulseRed { 0% { box-shadow: 0 0 0 0 rgba(255, 102, 102, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(255, 102, 102, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 102, 102, 0); } }
+@keyframes pulse-icon { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes hoverFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes glitchText { 0% { transform: translate(0); text-shadow: 2px 0 red, -2px 0 blue; } 2% { transform: translate(-2px, 2px); } 4% { transform: translate(2px, -2px); } 6% { transform: translate(0); } 100% { transform: translate(0); } }
 
-/* Apply fast tap animations to ALL interactive elements */
-button:active,
-.btn:active, 
-.tab:active,
-.map-center-btn:active,
-.combat-btn:active,
-.size-option:active,
-.upgrade-item:active,
-.contract-item:active,
-.system-overview-item:active,
+/* ==========================================================================
+   9. INTERACTION STATES & MOBILE OPTIMIZATIONS
+   ========================================================================== */
+/* Active States for Instant Touch Feedback */
+button:active, .btn:active, .tab:active, .map-center-btn:active,
+.combat-btn:active, .size-option:active, .upgrade-item:active,
+.contract-item:active, .system-overview-item:active, 
 .market-controls button:active {
     transform: scale(0.95);
-    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1), 
-                filter var(--mobile-tap-fast) ease;
+    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1), filter var(--mobile-tap-fast) ease;
 }
 
-/* Ensure hover states don't interfere with active states on mobile */
-@media (hover: none) {
-    .btn:hover,
-    .tab:hover,
-    .combat-btn:hover,
-    .upgrade-item:hover,
-    .contract-item:hover,
-    .system-overview-item:hover {
-        transform: none;
-    }
-}
-
-/* ==========================================================================
-   21. MOBILE INTERACTION PATCH (JS DRIVEN)
-   Critically fixes the 100ms delay on mobile taps by allowing JS to 
-   force the 'pressed' state instantly via .is-active class.
-   ========================================================================== */
-
-/* Force instant transition for JS-triggered active states */
-.btn.is-active, 
-.tab.is-active,
-.combat-btn.is-active,
-.map-center-btn.is-active,
-.btn-buy.is-active, 
-.btn-sell.is-active,
-.upgrade-action button.is-active,
-.contract-button.is-active,
-.system-overview-item.is-active {
+/* JS-Driven "Active" classes for 0-delay tap response */
+.btn.is-active, .tab.is-active, .combat-btn.is-active, .map-center-btn.is-active,
+.btn-buy.is-active, .btn-sell.is-active, .upgrade-action button.is-active,
+.contract-button.is-active, .system-overview-item.is-active, 
+.close-map-btn.is-active, .btn-close.is-active, .size-option.is-active {
     transition-duration: 0.05s !important;
 }
 
-/* Standard Button & Actions */
-.btn.is-active, 
-.btn-action.is-active,
-.contract-button.is-active {
+/* Specific Active Overrides */
+.btn.is-active, .btn-action.is-active, .contract-button.is-active, 
+.map-center-btn.is-active, .close-map-btn.is-active, .btn-close.is-active {
     transform: scale(0.92) !important;
     filter: brightness(1.2);
     box-shadow: none;
 }
+.combat-btn.is-active { transform: translateY(2px) scale(0.95); filter: brightness(1.3); box-shadow: inset 0 2px 5px rgba(0,0,0,0.5); }
+.tab.is-active { transform: scale(0.92); background: rgba(255,255,255,0.08); }
+.btn-buy.is-active, .btn-sell.is-active, .upgrade-action button.is-active { transform: scale(0.9) !important; filter: brightness(1.4); background: #fff !important; color: #000 !important; }
+.system-overview-item.is-active { transform: scale(0.98); background: rgba(255,255,255,0.1); }
+.size-option.is-active { transform: scale(0.95); filter: brightness(1.2); }
 
-/* Combat Buttons (Deeper press) */
-.combat-btn.is-active {
-    transform: translateY(2px) scale(0.95);
-    filter: brightness(1.3);
-    box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
+/* Prevent Hover Stuck on Touch */
+@media (hover: none) {
+    .btn:hover, .tab:hover, .combat-btn:hover, .upgrade-item:hover, .contract-item:hover, .system-overview-item:hover { transform: none; }
 }
 
-/* Tabs */
-.tab.is-active {
-    transform: scale(0.92);
-    background: rgba(255,255,255,0.08);
+/* Accessibility */
+.btn:focus-visible, .tab:focus-visible, .combat-btn:focus-visible, .map-center-btn:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+@media (prefers-contrast: high) {
+    :root { --border-dim: rgba(255, 255, 255, 0.3); --border-light: rgba(255, 255, 255, 0.6); }
+    .btn, .combat-btn, .tab { border-width: 2px; }
 }
-
-/* Map Controls */
-.map-center-btn.is-active,
-.close-map-btn.is-active, 
-.btn-close.is-active {
-    transform: scale(0.92) !important;
-    filter: brightness(1.2);
-}
-
-/* Market / Small Buttons */
-.btn-buy.is-active, 
-.btn-sell.is-active,
-.upgrade-action button.is-active {
-    transform: scale(0.9) !important;
-    filter: brightness(1.4);
-    background: #fff !important; /* Flash white for impact */
-    color: #000 !important;
-}
-
-/* List Items */
-.system-overview-item.is-active {
-    transform: scale(0.98);
-    background: rgba(255,255,255,0.1);
-}
-
-.size-option.is-active {
-    transform: scale(0.95);
-    filter: brightness(1.2);
+@media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    .btn:active, .combat-btn:active, .tab:active { transform: scale(0.98); }
 }
 
 /* ==========================================================================
-   22. ACCESSIBILITY IMPROVEMENTS
+   10. RESPONSIVE MEDIA QUERIES
    ========================================================================== */
-
-/* Focus styles for keyboard navigation */
-.btn:focus-visible,
-.tab:focus-visible,
-.combat-btn:focus-visible,
-.map-center-btn:focus-visible {
-    outline: 2px solid var(--accent-primary);
-    outline-offset: 2px;
+/* Ultrawide */
+@media (min-width: 2000px) {
+    :root { --panel-width: 500px; }
+    body { font-size: 16px; }
 }
 
-/* High contrast mode support */
-@media (prefers-contrast: high) {
-    :root {
-        --border-dim: rgba(255, 255, 255, 0.3);
-        --border-light: rgba(255, 255, 255, 0.6);
-    }
+/* Desktop/Tablet */
+@media (max-width: 1024px) {
+    :root { --panel-width: 300px; }
+}
+
+/* Mobile Devices */
+@media (max-width: 768px) {
+    /* Layout */
+    .app-container, .game-interface { flex-direction: column; }
+    .map-container { flex: 2; height: 50vh; order: 1; }
+    .ui-panel { width: 100%; height: 50vh; order: 2; border-left: none; border-top: 1px solid var(--border-light); }
     
-    .btn, .combat-btn, .tab {
-        border-width: 2px;
-    }
-}
-
-/* Reduced motion support */
-@media (prefers-reduced-motion: reduce) {
-    * {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-    }
+    /* Touch Targets & Sizes */
+    :root { --mobile-tap-target: 48px; }
+    .btn, button, .tab, .combat-btn, .market-controls button { min-height: var(--mobile-tap-target); min-width: var(--mobile-tap-target); padding: 12px 16px; }
+    .btn.small { min-height: calc(var(--mobile-tap-target) - 8px); min-width: calc(var(--mobile-tap-target) - 8px); padding: 8px 12px; }
+    .size-option, .upgrade-item, .contract-item, .system-overview-item { min-height: var(--mobile-tap-target); }
+    input, select, textarea { font-size: 16px; min-height: var(--mobile-tap-target); }
     
-    .btn:active,
-    .combat-btn:active,
-    .tab:active {
-        transform: scale(0.98);
-    }
+    /* Modals & Screens */
+    .encounter-container { width: 95%; max-height: 85vh; }
+    .encounter-body { padding: 20px 15px; }
+    .combat-options { grid-template-columns: 1fr; gap: 12px; padding: 15px; }
+    .combat-btn { min-width: 100%; padding: 18px 10px; }
+    .game-title { font-size: 2.5rem; }
+    .subtitle { font-size: 0.9rem; letter-spacing: 4px; }
+    .tab-content { padding: 15px; }
+
+    /* Market Grid Mobile */
+    .market-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .market-header:nth-child(4), .market-header:nth-child(5),
+    .market-item > div:nth-child(4), .market-item > div:nth-child(5) { display: none; }
+    .market-controls { flex-wrap: wrap; gap: 8px; }
+    .market-controls button { flex: 1; min-width: calc(50% - 4px); }
+
+    /* Cargo Mobile */
+    .cargo-item { grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 0; }
+    .cargo-item > div:nth-child(3) { grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-top: 8px; }
+
+    /* Shipyard Mobile */
+    .upgrade-item { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .upgrade-action, .upgrade-action .btn { width: 100%; text-align: center; }
 }
 
-/* --- END OF FILE styles.css --- */
+/* Small Screens */
+@media (max-width: 380px) {
+    .tabs { flex-wrap: nowrap; overflow-x: auto; }
+    .tab { min-width: 80px; font-size: 9px; }
+    .tab i { font-size: 14px; }
+}
