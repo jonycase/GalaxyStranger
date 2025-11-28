@@ -1,0 +1,583 @@
+/* --- START OF FILE styles.css --- */
+
+/* ==========================================================================
+   1. ROOT VARIABLES & THEME CONFIGURATION
+   ========================================================================== */
+:root {
+    /* --- Core Palette: Deep Space --- */
+    --bg-void: #050608;
+    --bg-deep: #0b0c15;
+    --bg-panel: #13141f;
+    --bg-glass: rgba(19, 20, 31, 0.95);
+    
+    /* --- UI Accents (Neon Sci-Fi) --- */
+    --accent-primary: #66ccff;    /* Hologram Cyan */
+    --accent-secondary: #8899aa;  /* Steel Grey */
+    --accent-success: #66ff99;    /* Bio Green */
+    --accent-warning: #ffcc66;    /* Amber Alert */
+    --accent-danger: #ff6666;     /* Critical Red */
+    --accent-rare: #b088ff;       /* Ethereal Purple */
+    
+    /* --- Borders & Depth --- */
+    --border-dim: rgba(255, 255, 255, 0.1);
+    --border-light: rgba(255, 255, 255, 0.2);
+    --border-glow: rgba(102, 204, 255, 0.5);
+    
+    /* --- Typography --- */
+    --font-main: 'Exo 2', 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'Consolas', 'Monaco', monospace;
+    
+    /* --- Spacing & sizing --- */
+    --header-height: 60px;
+    --panel-width: 380px;
+    
+    /* --- Z-Indices --- */
+    --z-map: 10;
+    --z-hud: 20;
+    --z-ui: 50;
+    --z-modal-backdrop: 1000;
+    --z-modal-content: 1001;
+    --z-overlay-top: 9999;
+
+    /* --- Mobile Optimizations --- */
+    --mobile-tap-target: 44px; /* Minimum touch target size */
+    --mobile-tap-fast: 0.08s; /* Faster feedback for mobile */
+}
+
+/* ==========================================================================
+   2. GLOBAL RESET & BASE STYLES
+   ========================================================================== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    outline: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none; 
+}
+
+/* CRITICAL: Remove 300ms delay and highlight on interactive elements */
+button, a, [role="button"], 
+.tab, .map-center-btn, .combat-btn, .btn, 
+.market-controls button, .size-option, .upgrade-item, 
+.contract-item, .system-overview-item {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--bg-void);
+    color: #e0e0e0;
+    font-family: var(--font-main);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; border: 1px solid var(--bg-deep); }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-secondary); }
+#nearby-systems::-webkit-scrollbar { width: 4px; }
+
+/* Text Selection */
+::selection {
+    background: var(--accent-primary);
+    color: var(--bg-void);
+}
+
+/* Helper Classes */
+.text-success { color: var(--accent-success) !important; }
+.text-danger { color: var(--accent-danger) !important; }
+.text-warning { color: var(--accent-warning) !important; }
+.text-info { color: var(--accent-primary) !important; }
+.text-muted { color: var(--accent-secondary) !important; }
+.blink { animation: blinkAnim 1s infinite; }
+.cursor-blink {
+    display: inline-block;
+    width: 6px; height: 12px;
+    background: var(--accent-success);
+    animation: blinkCursor 1s infinite steps(2);
+    vertical-align: middle;
+    margin-left: 2px;
+}
+.unselectable { user-select: none; }
+
+/* ==========================================================================
+   3. LAYOUT & CONTAINERS
+   ========================================================================== */
+.app-container {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    background: radial-gradient(circle at center, #1a1b2e 0%, #000 100%);
+}
+
+.game-interface {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    flex-direction: row;
+    opacity: 0;
+    transition: opacity 1s ease-in;
+    animation: interfaceFadeIn 1.5s forwards;
+}
+
+/* Left Panel: Map Container */
+.map-container {
+    flex: 1;
+    position: relative;
+    background: #000;
+    overflow: hidden;
+    cursor: grab;
+    box-shadow: inset 0 0 50px rgba(0,0,0,0.8);
+    touch-action: none; 
+}
+.map-container:active { cursor: grabbing; }
+
+#galaxy-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.pulse-alert { animation: pulseRed 2s infinite; }
+
+/* ==========================================================================
+   5. COMPONENT STYLES (Buttons, Tabs, Lists)
+   ========================================================================== */
+/* Generic Button */
+.btn {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border-light);
+    color: #e0e0e0;
+    font-family: var(--font-main);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    min-height: var(--mobile-tap-target);
+    min-width: var(--mobile-tap-target);
+}
+.btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border-color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(0,0,0,0.2);
+    border-color: transparent;
+    pointer-events: none;
+}
+.btn.small {
+    padding: 4px 10px;
+    font-size: 11px;
+    min-height: calc(var(--mobile-tap-target) - 8px);
+    min-width: calc(var(--mobile-tap-target) - 8px);
+}
+
+/* Action / Scan Buttons */
+.btn-action {
+    background: var(--accent-primary);
+    color: #0b0c15;
+    border: none;
+    font-weight: 800;
+    font-size: 16px;
+    letter-spacing: 2px;
+    box-shadow: 0 0 20px rgba(102, 204, 255, 0.4);
+}
+.btn-action:hover {
+    background: #fff;
+    box-shadow: 0 0 40px rgba(102, 204, 255, 0.6);
+    transform: scale(1.02);
+}
+.btn-scan {
+    background: rgba(176, 136, 255, 0.1);
+    border-color: var(--accent-rare);
+    color: var(--accent-rare);
+    transition: all 0.3s ease;
+}
+.btn-scan:hover {
+    background: var(--accent-rare);
+    color: #000;
+    box-shadow: 0 0 15px rgba(176, 136, 255, 0.4);
+}
+.btn-scan i { animation: pulse-icon 2s infinite; }
+
+/* Trade Buttons */
+.btn-buy, .btn-sell {
+    padding: 4px 8px;
+    font-size: 10px;
+    min-width: 60px;
+}
+.btn-buy { border-color: rgba(102, 255, 153, 0.3); color: var(--accent-success); }
+.btn-buy:hover { background: rgba(102, 255, 153, 0.1); border-color: var(--accent-success); box-shadow: 0 0 10px rgba(102, 255, 153, 0.2); }
+.btn-sell { border-color: rgba(255, 102, 102, 0.3); color: var(--accent-danger); }
+.btn-sell:hover { background: rgba(255, 102, 102, 0.1); border-color: var(--accent-danger); box-shadow: 0 0 10px rgba(255, 102, 102, 0.2); }
+
+
+/* ==========================================================================
+   6. PANEL CONTENT & MODULES
+   ========================================================================== */
+.tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    position: relative;
+}
+.panel-section h2 {
+    margin: 0 0 20px 0;
+    font-size: 14px;
+    color: var(--accent-primary);
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Status Dashboard */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.stat {
+    background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+    border: 1px solid var(--border-dim);
+    border-left: 2px solid var(--border-light);
+    padding: 12px 15px;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+.stat:hover { background: rgba(255,255,255,0.05); border-left-color: var(--accent-primary); transform: translateX(2px); }
+.stat span:first-child { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-secondary); margin-bottom: 5px; }
+.stat-value { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: 0.5px; font-family: var(--font-mono); }
+#hull { color: var(--accent-danger); text-shadow: 0 0 10px rgba(255, 102, 102, 0.3); }
+#credits { color: var(--accent-success); }
+#fuel { color: var(--accent-warning); }
+
+/* Initialization / Start Screen */
+.init-screen {
+    background: radial-gradient(circle at center, #1a1b2e 0%, #000 100%);
+    z-index: 9999;
+    flex-direction: column;
+    transition: opacity 0.8s ease-out;
+}
+.game-title {
+    font-size: 4rem; font-weight: 800; line-height: 1; color: #fff;
+    text-shadow: 0 0 20px var(--accent-primary), 0 0 40px var(--accent-primary);
+    text-align: center; margin-bottom: 10px; letter-spacing: 5px;
+    animation: glowPulse 3s infinite alternate;
+}
+.subtitle { font-size: 1.2rem; color: var(--accent-secondary); letter-spacing: 8px; text-transform: uppercase; margin-bottom: 50px; }
+.setup-box {
+    background: rgba(255,255,255,0.03);
+    padding: 40px;
+    border-radius: 16px;
+    border: 1px solid var(--border-light);
+    width: 90%; max-width: 500px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+.galaxy-size-selector { display: flex; gap: 15px; margin-bottom: 25px; }
+.size-option {
+    flex: 1; background: rgba(0,0,0,0.4); border: 2px solid transparent; padding: 20px 10px;
+    border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.2s;
+    min-height: var(--mobile-tap-target);
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+}
+.size-option:hover { background: rgba(255,255,255,0.05); }
+.size-option.selected { border-color: var(--accent-primary); background: rgba(102, 204, 255, 0.1); box-shadow: 0 0 20px rgba(102, 204, 255, 0.2); }
+.size-option .icon { font-size: 24px; margin-bottom: 10px; color: var(--accent-secondary); }
+.size-option.selected .icon { color: var(--accent-primary); }
+
+/
+/* Full Galaxy Map Modal */
+.galaxy-map-modal { background: rgba(5, 6, 8, 0.98); z-index: 1500; padding: 20px; }
+.map-widget-container {
+    width: 100%; height: 100%; max-width: 1600px;
+    display: flex; flex-direction: column;
+    border: 1px solid var(--border-glow); background: #0b0c15;
+    border-radius: 8px; overflow: hidden; box-shadow: 0 0 100px rgba(0,0,0,0.8);
+    position: relative;
+}
+.map-header {
+    height: 60px; padding: 0 25px;
+    background: linear-gradient(90deg, #1a1b2e 0%, #0b0c15 100%);
+    border-bottom: 1px solid var(--border-dim);
+    display: flex; justify-content: space-between; align-items: center; z-index: 10;
+}
+.map-header h2 { font-size: 18px; color: var(--accent-primary); letter-spacing: 4px; text-transform: uppercase; display: flex; align-items: center; gap: 15px; }
+.map-header h2 i { opacity: 0.7; }
+.map-canvas-wrapper {
+    flex: 1; position: relative;
+    background: radial-gradient(circle at center, #111 0%, #000 100%);
+    overflow: hidden; touch-action: none;
+}
+#full-galaxy-canvas { width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.map-controls-overlay { position: absolute; top: 20px; left: 20px; pointer-events: none; display: flex; flex-direction: column; gap: 15px; }
+.search-container { pointer-events: auto; display: flex; background: rgba(11, 12, 21, 0.9); border: 1px solid var(--border-light); border-radius: 4px; padding: 5px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); backdrop-filter: blur(5px); }
+#map-search-input { background: transparent; border: none; color: #fff; padding: 8px 12px; width: 250px; font-family: var(--font-main); font-size: 14px; }
+#map-search-btn { background: transparent; border: none; color: var(--accent-primary); padding: 0 15px; cursor: pointer; transition: color 0.2s; min-width: var(--mobile-tap-target); min-height: var(--mobile-tap-target); }
+#map-search-btn:hover { color: #fff; }
+.map-info-box {
+    pointer-events: auto; background: rgba(11, 12, 21, 0.95);
+    border: 1px solid var(--accent-warning); border-left: 4px solid var(--accent-warning);
+    padding: 20px; border-radius: 4px; width: 280px;
+    display: none; flex-direction: column; gap: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    animation: slideInLeft 0.3s ease-out;
+}
+.map-info-box.active { display: flex; }
+.info-details strong { color: var(--accent-warning); font-size: 18px; display: block; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; }
+.info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; }
+.info-label { color: #888; }
+.info-val { color: #fff; font-weight: bold; }
+
+/* ==========================================================================
+   8. ANIMATIONS
+   ========================================================================== */
+@keyframes interfaceFadeIn { to { opacity: 1; } }
+@keyframes pointerBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+@keyframes glowPulse { from { text-shadow: 0 0 20px var(--accent-primary); } to { text-shadow: 0 0 40px var(--accent-primary), 0 0 80px var(--accent-primary); } }
+@keyframes pulseText { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+@keyframes slideInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes blinkAnim { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes blinkCursor { 0% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes pulseRed { 0% { box-shadow: 0 0 0 0 rgba(255, 102, 102, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(255, 102, 102, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 102, 102, 0); } }
+@keyframes pulse-icon { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes hoverFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes glitchText { 0% { transform: translate(0); text-shadow: 2px 0 red, -2px 0 blue; } 2% { transform: translate(-2px, 2px); } 4% { transform: translate(2px, -2px); } 6% { transform: translate(0); } 100% { transform: translate(0); } }
+
+
+
+/* --- START OF FILE styles.css (Additions) --- */
+
+/* ==========================================================================
+   ENHANCED TRAVEL ANIMATIONS
+   ========================================================================== */
+
+/* Ship traveling state */
+.ship-indicator.traveling {
+    filter: drop-shadow(0 0 8px var(--accent-primary)) 
+            drop-shadow(0 0 20px var(--accent-primary));
+    animation: enginePulse 0.5s ease-in-out infinite alternate;
+    z-index: 100; /* Ensure ship stays above trails */
+}
+
+@keyframes enginePulse {
+    from {
+        filter: drop-shadow(0 0 8px var(--accent-primary)) 
+                drop-shadow(0 0 20px var(--accent-primary));
+    }
+    to {
+        filter: drop-shadow(0 0 12px var(--accent-primary)) 
+                drop-shadow(0 0 30px var(--accent-primary)) 
+                drop-shadow(0 0 40px var(--accent-warning));
+    }
+}
+
+/* Engine trail effects */
+.engine-trail {
+    position: absolute;
+    pointer-events: none;
+    z-index: 24;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 10px var(--accent-primary);
+}
+
+/* 3. Engine Particles */
+.engine-particle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: white;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 90; /* Below ship */
+    box-shadow: 0 0 4px var(--accent-primary);
+}
+
+/* 4. Arrival Flash (Shockwave) */
+.arrival-flash {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle, #ffffff 0%, rgba(102, 204, 255, 0.8) 30%, transparent 70%);
+    pointer-events: none;
+    z-index: 200; /* Above everything */
+    mix-blend-mode: screen;
+    transform: translate(-50%, -50%);
+}
+
+/* 5. Traveling UI Panel Overlay (Scanline effect) */
+.ui-panel.traveling {
+    position: relative;
+    overflow: hidden;
+}
+
+.ui-panel.traveling::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, 
+        transparent, 
+        rgba(102, 204, 255, 0.1), 
+        transparent);
+    animation: travelScan 2s linear infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.ui-panel.traveling::after {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(rgba(102, 204, 255, 0.05) 50%, transparent 50%);
+    background-size: 100% 4px;
+    pointer-events: none;
+    z-index: 10;
+}
+
+@keyframes travelScan {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+/* ==========================================================================
+   9. INTERACTION STATES & MOBILE OPTIMIZATIONS
+   ========================================================================== */
+/* Active States for Instant Touch Feedback */
+button:active, .btn:active, .tab:active, .map-center-btn:active,
+.combat-btn:active, .size-option:active, .upgrade-item:active,
+.contract-item:active, .system-overview-item:active, 
+.market-controls button:active {
+    transform: scale(0.95);
+    transition: transform var(--mobile-tap-fast) cubic-bezier(0.4, 0, 0.2, 1), filter var(--mobile-tap-fast) ease;
+}
+
+/* JS-Driven "Active" classes for 0-delay tap response */
+.btn.is-active, .tab.is-active, .combat-btn.is-active, .map-center-btn.is-active,
+.btn-buy.is-active, .btn-sell.is-active, .upgrade-action button.is-active,
+.contract-button.is-active, .system-overview-item.is-active, 
+.close-map-btn.is-active, .btn-close.is-active, .size-option.is-active {
+    transition-duration: 0.05s !important;
+}
+
+/* Specific Active Overrides */
+.btn.is-active, .btn-action.is-active, .contract-button.is-active, 
+.map-center-btn.is-active, .close-map-btn.is-active, .btn-close.is-active {
+    transform: scale(0.92) !important;
+    filter: brightness(1.2);
+    box-shadow: none;
+}
+.combat-btn.is-active { transform: translateY(2px) scale(0.95); filter: brightness(1.3); box-shadow: inset 0 2px 5px rgba(0,0,0,0.5); }
+.tab.is-active { transform: scale(0.92); background: rgba(255,255,255,0.08); }
+.btn-buy.is-active, .btn-sell.is-active, .upgrade-action button.is-active { transform: scale(0.9) !important; filter: brightness(1.4); background: #fff !important; color: #000 !important; }
+.system-overview-item.is-active { transform: scale(0.98); background: rgba(255,255,255,0.1); }
+.size-option.is-active { transform: scale(0.95); filter: brightness(1.2); }
+
+/* Prevent Hover Stuck on Touch */
+@media (hover: none) {
+    .btn:hover, .tab:hover, .combat-btn:hover, .upgrade-item:hover, .contract-item:hover, .system-overview-item:hover { transform: none; }
+}
+
+/* Accessibility */
+.btn:focus-visible, .tab:focus-visible, .combat-btn:focus-visible, .map-center-btn:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+@media (prefers-contrast: high) {
+    :root { --border-dim: rgba(255, 255, 255, 0.3); --border-light: rgba(255, 255, 255, 0.6); }
+    .btn, .combat-btn, .tab { border-width: 2px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    .btn:active, .combat-btn:active, .tab:active { transform: scale(0.98); }
+}
+
+/* ==========================================================================
+   10. RESPONSIVE MEDIA QUERIES
+   ========================================================================== */
+/* Ultrawide */
+@media (min-width: 2000px) {
+    :root { --panel-width: 500px; }
+    body { font-size: 16px; }
+}
+
+/* Desktop/Tablet */
+@media (max-width: 1024px) {
+    :root { --panel-width: 300px; }
+}
+
+/* Mobile Devices */
+@media (max-width: 768px) {
+    /* Layout */
+    .app-container, .game-interface { flex-direction: column; }
+    .map-container { flex: 2; height: 50vh; order: 1; }
+    .ui-panel { width: 100%; height: 50vh; order: 2; border-left: none; border-top: 1px solid var(--border-light); }
+    
+    /* Touch Targets & Sizes */
+    :root { --mobile-tap-target: 48px; }
+    .btn, button, .tab, .combat-btn, .market-controls button { min-height: var(--mobile-tap-target); min-width: var(--mobile-tap-target); padding: 12px 16px; }
+    .btn.small { min-height: calc(var(--mobile-tap-target) - 8px); min-width: calc(var(--mobile-tap-target) - 8px); padding: 8px 12px; }
+    .size-option, .upgrade-item, .contract-item, .system-overview-item { min-height: var(--mobile-tap-target); }
+    input, select, textarea { font-size: 16px; min-height: var(--mobile-tap-target); }
+    
+    /* Modals & Screens */
+    .encounter-container { width: 95%; max-height: 85vh; }
+    .encounter-body { padding: 20px 15px; }
+    .combat-options { grid-template-columns: 1fr; gap: 12px; padding: 15px; }
+    .combat-btn { min-width: 100%; padding: 18px 10px; }
+    .game-title { font-size: 2.5rem; }
+    .subtitle { font-size: 0.9rem; letter-spacing: 4px; }
+    .tab-content { padding: 15px; }
+
+    /* Market Grid Mobile */
+    .market-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .market-header:nth-child(4), .market-header:nth-child(5),
+    .market-item > div:nth-child(4), .market-item > div:nth-child(5) { display: none; }
+    .market-controls { flex-wrap: wrap; gap: 8px; }
+    .market-controls button { flex: 1; min-width: calc(50% - 4px); }
+
+    /* Cargo Mobile */
+    .cargo-item { grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 0; }
+    .cargo-item > div:nth-child(3) { grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-top: 8px; }
+
+    /* Shipyard Mobile */
+    .upgrade-item { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .upgrade-action, .upgrade-action .btn { width: 100%; text-align: center; }
+}
+
+/* Small Screens */
+@media (max-width: 380px) {
+    .tabs { flex-wrap: nowrap; overflow-x: auto; }
+    .tab { min-width: 80px; font-size: 9px; }
+    .tab i { font-size: 14px; }
+}
