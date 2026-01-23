@@ -11,7 +11,7 @@ import { Encounter } from './Encounter.js';
 const ENCOUNTER_CONFIG = {
     // Global Base Chance (0.0 to 1.0)
     // 0.9 = 90% chance every jump
-    BASE_CHANCE: 0.2, 
+    BASE_CHANCE: 0.35, 
 
     // Modifiers based on System Security
     // These are added to BASE_CHANCE
